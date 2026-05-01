@@ -34,7 +34,22 @@ def send_telegram(msg):
 # =========================
 def get_live_matches():
     try:
-        r = requests.get(BASE_URL, headers=HEADERS, timeout=10)
+        time.sleep(random.uniform(1, 3))
+
+        url = "https://api.sofascore.com/api/v1/sport/football/events/live"
+
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+            "Accept": "application/json",
+            "Referer": "https://www.sofascore.com/",
+        }
+
+        r = requests.get(url, headers=headers, timeout=10)
+
+        if r.status_code != 200:
+            print("Bad response:", r.status_code)
+            return []
+
         data = r.json()
 
         matches = []
@@ -42,6 +57,7 @@ def get_live_matches():
         for event in data.get("events", []):
             try:
                 minute = event.get("time", {}).get("played")
+
                 print(
                     event["homeTeam"]["name"],
                     "vs",
@@ -52,23 +68,24 @@ def get_live_matches():
                     "-",
                     event["awayScore"]["current"]
                 )
+
                 if not minute:
                     continue
-                
+
                 total_goals = event["homeScore"]["current"] + event["awayScore"]["current"]
-                
-                # halftime score (if available)
-                ht_home = event["homeScore"].get("period1", 0)
-                ht_away = event["awayScore"].get("period1", 0)
-                
+
+                ht_home = event["homeScore"].get("period1", 0) or 0
+                ht_away = event["awayScore"].get("period1", 0) or 0
+
                 ht_goals = ht_home + ht_away
                 second_half_goals = total_goals - ht_goals
-                print("HT goals:", ht_goals, "| 2H goals:", second_half_goals)
-                
+
+                print("HT:", ht_goals, "| 2H:", second_half_goals)
+
                 # ✅ CONDITIONS
                 ht_window = 38 <= minute <= 47
-                second_half_window = 55 <= minute <= 80 and second_half_goals <= 1 and total_goals <= 3
-                
+                second_half_window = 55 <= minute <= 70 and second_half_goals <= 1
+
                 if ht_window or second_half_window:
                     matches.append({
                         "id": event["id"],
@@ -78,13 +95,14 @@ def get_live_matches():
                         "homeScore": event["homeScore"]["current"],
                         "awayScore": event["awayScore"]["current"]
                     })
+
             except:
                 continue
 
         return matches
 
     except Exception as e:
-        print("Live error:", e)
+        print("Error:", e)
         return []
 
 # =========================
