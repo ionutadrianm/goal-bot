@@ -220,24 +220,6 @@ Winrate: {winrate}%
 # =========================
 # MAIN LOOP
 # =========================
-test_msg = f"""
-🔥 ELITE SIGNAL
-
-Test Team A vs Test Team B
-Min: 62'
-Score: 1-1
-
-Shots: 14
-SOT: 6
-Corners: 7
-
-Momentum: +25
-Model Score: 85
-
-➡️ Over 1.5 2nd half
-"""
-send_telegram(test_msg)
-
 def run():
     print("API-Football bot running...")
 
