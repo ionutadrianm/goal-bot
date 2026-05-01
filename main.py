@@ -42,7 +42,16 @@ def get_live_matches():
         for event in data.get("events", []):
             try:
                 minute = event.get("time", {}).get("played")
-
+                print(
+                    event["homeTeam"]["name"],
+                    "vs",
+                    event["awayTeam"]["name"],
+                    "| min:", minute,
+                    "| score:",
+                    event["homeScore"]["current"],
+                    "-",
+                    event["awayScore"]["current"]
+                )
                 if not minute:
                     continue
                 
@@ -54,10 +63,11 @@ def get_live_matches():
                 
                 ht_goals = ht_home + ht_away
                 second_half_goals = total_goals - ht_goals
+                print("HT goals:", ht_goals, "| 2H goals:", second_half_goals)
                 
                 # ✅ CONDITIONS
                 ht_window = 38 <= minute <= 47
-                second_half_window = 55 <= minute <= 70 and second_half_goals <= 1 and total_goals <= 3
+                second_half_window = 55 <= minute <= 80 and second_half_goals <= 1 and total_goals <= 3
                 
                 if ht_window or second_half_window:
                     matches.append({
