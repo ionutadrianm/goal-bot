@@ -84,7 +84,7 @@ def get_live_matches():
 
                 # ✅ CONDITIONS
                 ht_window = 38 <= minute <= 47
-                second_half_window = 55 <= minute <= 70 and second_half_goals <= 1
+                second_half_window = 55 <= minute <= 90 and second_half_goals <= 1
 
                 if ht_window or second_half_window:
                     matches.append({
