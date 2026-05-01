@@ -58,7 +58,21 @@ def send_reply(msg_id, result, score):
 def get_live_matches():
     url = f"{BASE_URL}/fixtures?live=all"
     r = requests.get(url, headers=HEADERS)
-    return r.json()["response"]
+
+    print("STATUS:", r.status_code)
+
+    try:
+        data = r.json()
+
+        print("RESULTS:", data.get("results"))
+        print("ERRORS:", data.get("errors"))
+        print("COUNT RESPONSE:", len(data.get("response", [])))
+
+        return data.get("response", [])
+
+    except Exception as e:
+        print("JSON ERROR:", e)
+        return []
 
 def get_events(fixture_id):
     url = f"{BASE_URL}/fixtures/events?fixture={fixture_id}"
