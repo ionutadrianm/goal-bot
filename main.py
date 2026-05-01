@@ -161,7 +161,7 @@ def run():
                     # CONDITIONS
                     # =========================
                     ht_window = 38 <= minute <= 47
-                    second_half_window = 55 <= minute <= 80 and second_half_goals <= 3
+                    second_half_window = 55 <= minute <= 90 and second_half_goals <= 3
 
                     if not (ht_window or second_half_window):
                         continue
