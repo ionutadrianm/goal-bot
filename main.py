@@ -95,7 +95,6 @@ def count_second_half_goals(events):
         if e["type"] == "Goal" and e["time"]["elapsed"] >= 46:
             count += 1
     return count
-print(f"{home} vs {away} | min: {minute} | 2H goals: {second_half_goals}")
 
 # =========================
 # MOMENTUM ENGINE ⚡
