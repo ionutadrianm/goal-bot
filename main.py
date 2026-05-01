@@ -1,22 +1,20 @@
 import requests
 import time
 import random
+import os
 
 # =========================
 # CONFIG
 # =========================
-import os
+API_KEY = os.getenv("c665655709c09d50a2af5299d17451ff")
 
 BOT_TOKEN = os.getenv("8748189864:AAHw-ud38HMooNiFy_NffvoYLHbDzgeFPB0")
 CHAT_ID = os.getenv("5741320219")
 
-BASE_URL = "https://sofascore.p.rapidapi.com/events/live"
+BASE_URL = "https://v3.football.api-sports.io"
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-    "Accept": "*/*",
-    "Referer": "https://www.sofascore.com/",
-    "Origin": "https://www.sofascore.com"
+    "x-apisports-key": API_KEY
 }
 
 seen_matches = set()
@@ -33,158 +31,96 @@ def send_telegram(msg):
 # =========================
 def get_live_matches():
     try:
-        time.sleep(random.uniform(1, 3))
-
-        url = "https://api.sofascore.com/api/v1/sport/football/events/live"
-
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-            "Accept": "application/json",
-            "Referer": "https://www.sofascore.com/",
-        }
-
-        r = requests.get(url, headers=headers, timeout=10)
-
-        if r.status_code != 200:
-            print("Bad response:", r.status_code)
-            return []
-
+        url = f"{BASE_URL}/fixtures?live=all"
+        r = requests.get(url, headers=HEADERS, timeout=10)
         data = r.json()
 
-        matches = []
-
-        for event in data.get("events", []):
-            try:
-                minute = event.get("time", {}).get("played")
-
-                print(
-                    event["homeTeam"]["name"],
-                    "vs",
-                    event["awayTeam"]["name"],
-                    "| min:", minute,
-                    "| score:",
-                    event["homeScore"]["current"],
-                    "-",
-                    event["awayScore"]["current"]
-                )
-
-                if not minute:
-                    continue
-
-                total_goals = event["homeScore"]["current"] + event["awayScore"]["current"]
-
-                ht_home = event["homeScore"].get("period1", 0) or 0
-                ht_away = event["awayScore"].get("period1", 0) or 0
-
-                ht_goals = ht_home + ht_away
-                second_half_goals = total_goals - ht_goals
-
-                print("HT:", ht_goals, "| 2H:", second_half_goals)
-
-                # ✅ CONDITIONS
-                ht_window = 38 <= minute <= 47
-                second_half_window = 55 <= minute <= 90 and second_half_goals <= 1
-
-                if ht_window or second_half_window:
-                    matches.append({
-                        "id": event["id"],
-                        "home": event["homeTeam"]["name"],
-                        "away": event["awayTeam"]["name"],
-                        "minute": minute,
-                        "homeScore": event["homeScore"]["current"],
-                        "awayScore": event["awayScore"]["current"]
-                    })
-
-            except:
-                continue
-
-        return matches
+        return data.get("response", [])
 
     except Exception as e:
-        print("Error:", e)
+        print("Live error:", e)
         return []
 
 # =========================
-# GET STATS
+# GET EVENTS (GOALS)
+# =========================
+def get_events(match_id):
+    try:
+        url = f"{BASE_URL}/fixtures/events?fixture={match_id}"
+        r = requests.get(url, headers=HEADERS, timeout=10)
+        data = r.json()
+
+        return data.get("response", [])
+
+    except:
+        return []
+
+# =========================
+# COUNT 2ND HALF GOALS
+# =========================
+def count_second_half_goals(events):
+    goals_2h = 0
+
+    for e in events:
+        if e["type"] == "Goal":
+            minute = e["time"]["elapsed"]
+
+            if minute and minute > 45:
+                goals_2h += 1
+
+    return goals_2h
+
+# =========================
+# MOMENTUM (REAL STATS)
 # =========================
 def get_stats(match_id):
     try:
-        url = f"https://sofascore.p.rapidapi.com/event/statistics"
-        params = {"event_id": match_id}
+        url = f"{BASE_URL}/fixtures/statistics?fixture={match_id}"
+        r = requests.get(url, headers=HEADERS, timeout=10)
+        data = r.json()["response"]
 
-        r = requests.get(url, headers=HEADERS, params=params, timeout=10)
-        data = r.json()
+        stats = {}
 
-        stats = data["statistics"][0]["groups"][0]["statisticsItems"]
+        for team in data:
+            for s in team["statistics"]:
+                name = s["type"]
+                value = s["value"] or 0
 
-        def get(name):
-            for s in stats:
-                if s["name"] == name:
-                    return float(s["home"]) + float(s["away"])
-            return 0
+                if isinstance(value, str):
+                    value = value.replace("%", "")
+                    value = int(value) if value.isdigit() else 0
 
-        return (
-            get("Expected goals"),
-            get("Total shots"),
-            get("Shots on target"),
-            get("Corner kicks")
-        )
+                stats[name] = stats.get(name, 0) + value
+
+        return {
+            "shots": stats.get("Total Shots", 0),
+            "shots_on": stats.get("Shots on Goal", 0),
+            "corners": stats.get("Corner Kicks", 0)
+        }
 
     except:
-        return None, None, None, None
+        return {"shots": 0, "shots_on": 0, "corners": 0}
 
 # =========================
-# SCORING + MOMENTUM
+# MOMENTUM SCORE
 # =========================
-def calculate_score(xg, shots, sot, corners, score_diff):
+def momentum_score(stats):
     score = 0
 
-    # xG
-    if xg >= 2.2: score += 30
-    elif xg >= 1.8: score += 25
-    elif xg >= 1.4: score += 20
-    elif xg >= 1.0: score += 10
-
-    # shots
-    if shots >= 18: score += 20
-    elif shots >= 14: score += 15
-    elif shots >= 10: score += 10
-
-    # SOT
-    if sot >= 8: score += 20
-    elif sot >= 6: score += 15
-    elif sot >= 4: score += 10
-
-    # corners
-    if corners >= 8: score += 10
-    elif corners >= 6: score += 8
-    elif corners >= 4: score += 5
-
-    # game state
-    if score_diff == 0: score += 20
-    elif score_diff == 1: score += 15
-
-    # 🔥 MOMENTUM BOOST
-    if xg >= 1.8 and sot >= 6 and corners >= 5:
+    if stats["shots"] >= 12:
+        score += 10
+    if stats["shots_on"] >= 5:
         score += 15
+    if stats["corners"] >= 5:
+        score += 10
 
     return score
-
-# =========================
-# TIER
-# =========================
-def classify(score):
-    if score >= 80:
-        return "🔥 STRONG"
-    elif score >= 65:
-        return "⚡ MEDIUM"
-    return None
 
 # =========================
 # MAIN LOOP
 # =========================
 def run():
-    print("RapidAPI SofaScore bot running...")
+    print("API-Football DIRECT bot running...")
 
     while True:
         try:
@@ -192,42 +128,86 @@ def run():
             print(f"Found {len(matches)} matches")
 
             for m in matches:
-                if m["id"] in seen_matches:
-                    continue
+                try:
+                    fixture = m["fixture"]
+                    teams = m["teams"]
+                    goals = m["goals"]
 
-                time.sleep(random.uniform(1, 3))
+                    match_id = fixture["id"]
+                    minute = fixture["status"]["elapsed"]
 
-                xg, shots, sot, corners = get_stats(m["id"])
+                    if not minute:
+                        continue
 
-                if xg is None:
-                    continue
+                    if match_id in seen_matches:
+                        continue
 
-                score_diff = abs(m["homeScore"] - m["awayScore"])
+                    # =========================
+                    # EVENTS (GOALS)
+                    # =========================
+                    events = get_events(match_id)
+                    second_half_goals = count_second_half_goals(events)
 
-                score = calculate_score(xg, shots, sot, corners, score_diff)
-                tier = classify(score)
+                    print(
+                        teams["home"]["name"],
+                        "vs",
+                        teams["away"]["name"],
+                        "| min:", minute,
+                        "| 2H goals:", second_half_goals
+                    )
 
-                if tier:
+                    # =========================
+                    # CONDITIONS
+                    # =========================
+                    ht_window = 38 <= minute <= 47
+                    second_half_window = 55 <= minute <= 80 and second_half_goals <= 3
+
+                    if not (ht_window or second_half_window):
+                        continue
+
+                    # =========================
+                    # REAL MOMENTUM
+                    # =========================
+                    stats = get_stats(match_id)
+                    boost = momentum_score(stats)
+
+                    score = 50 + boost
+
+                    tier = "⚡ MEDIUM"
+                    if score >= 70:
+                        tier = "🔥 STRONG"
+
+                    # =========================
+                    # ALERT
+                    # =========================
                     msg = f"""
-{tier} 2H GOAL ALERT
+{tier} GOAL ALERT
 
-{m['home']} vs {m['away']}
-Minute: {m['minute']}'
-Score: {m['homeScore']}-{m['awayScore']}
+{teams['home']['name']} vs {teams['away']['name']}
+Minute: {minute}'
 
-xG: {round(xg,2)}
-Shots: {shots}
-SOT: {sot}
-Corners: {corners}
+Score: {goals['home']}-{goals['away']}
+2H Goals: {second_half_goals}
 
-Model Score: {score}
+Shots: {stats['shots']}
+SOT: {stats['shots_on']}
+Corners: {stats['corners']}
+
+Momentum Score: {score}
 
 ➡️ Over 1.5 2nd half
 """
                     send_telegram(msg)
-                    seen_matches.add(m["id"])
 
-            time.sleep(300)
+                    seen_matches.add(match_id)
+
+                    time.sleep(random.uniform(1, 2))
+
+                except Exception as e:
+                    print("Match error:", e)
+                    continue
+
+            time.sleep(180)
 
         except Exception as e:
             print("Loop error:", e)
