@@ -1,18 +1,19 @@
 import requests
 import time
-import random
+import json
 import os
+from datetime import datetime
 
 # =========================
 # CONFIG
 # =========================
 API_KEY = os.getenv("API_FOOTBALL_KEY")
-print("API KEY:", API_KEY)
 
-BOT_TOKEN = os.getenv("8748189864:AAHw-ud38HMooNiFy_NffvoYLHbDzgeFPB0")
-CHAT_ID = os.getenv("5741320219")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
 
 BASE_URL = "https://v3.football.api-sports.io"
+FILE = "data.json"
 
 HEADERS = {
     "x-apisports-key": API_KEY
@@ -21,107 +22,208 @@ HEADERS = {
 seen_matches = set()
 
 # =========================
+# FILE STORAGE
+# =========================
+def load_data():
+    try:
+        with open(FILE, "r") as f:
+            return json.load(f)
+    except:
+        return []
+
+def save_data(data):
+    with open(FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
+# =========================
 # TELEGRAM
 # =========================
 def send_telegram(msg):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
+    r = requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
+    return r.json()["result"]["message_id"]
+
+def send_reply(msg_id, result, score):
+    text = f"{'✅ WIN' if result=='WIN' else '❌ LOSS'}\nFinal: {score}"
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    requests.post(url, data={
+        "chat_id": CHAT_ID,
+        "text": text,
+        "reply_to_message_id": msg_id
+    })
 
 # =========================
-# GET LIVE MATCHES
+# API CALLS
 # =========================
 def get_live_matches():
+    url = f"{BASE_URL}/fixtures?live=all"
+    r = requests.get(url, headers=HEADERS)
+    return r.json()["response"]
+
+def get_events(fixture_id):
+    url = f"{BASE_URL}/fixtures/events?fixture={fixture_id}"
+    r = requests.get(url, headers=HEADERS)
+    return r.json()["response"]
+
+def get_stats(fixture_id):
+    url = f"{BASE_URL}/fixtures/statistics?fixture={fixture_id}"
+    r = requests.get(url, headers=HEADERS)
+    data = r.json()["response"]
+
+    stats = {"shots":0, "shots_on_target":0, "corners":0}
+
     try:
-        url = f"{BASE_URL}/fixtures?live=all"
-        r = requests.get(url, headers=HEADERS, timeout=10)
-        data = r.json()
-
-        return data.get("response", [])
-
-    except Exception as e:
-        print("Live error:", e)
-        return []
-
-# =========================
-# GET EVENTS (GOALS)
-# =========================
-def get_events(match_id):
-    try:
-        url = f"{BASE_URL}/fixtures/events?fixture={match_id}"
-        r = requests.get(url, headers=HEADERS, timeout=10)
-        data = r.json()
-
-        return data.get("response", [])
-
-    except:
-        return []
-
-# =========================
-# COUNT 2ND HALF GOALS
-# =========================
-def count_second_half_goals(events):
-    goals_2h = 0
-
-    for e in events:
-        if e["type"] == "Goal":
-            minute = e["time"]["elapsed"]
-
-            if minute and minute > 45:
-                goals_2h += 1
-
-    return goals_2h
-
-# =========================
-# MOMENTUM (REAL STATS)
-# =========================
-def get_stats(match_id):
-    try:
-        url = f"{BASE_URL}/fixtures/statistics?fixture={match_id}"
-        r = requests.get(url, headers=HEADERS, timeout=10)
-        data = r.json()["response"]
-
-        stats = {}
-
         for team in data:
             for s in team["statistics"]:
-                name = s["type"]
-                value = s["value"] or 0
-
-                if isinstance(value, str):
-                    value = value.replace("%", "")
-                    value = int(value) if value.isdigit() else 0
-
-                stats[name] = stats.get(name, 0) + value
-
-        return {
-            "shots": stats.get("Total Shots", 0),
-            "shots_on": stats.get("Shots on Goal", 0),
-            "corners": stats.get("Corner Kicks", 0)
-        }
-
+                if s["type"] == "Total Shots":
+                    stats["shots"] += int(s["value"] or 0)
+                if s["type"] == "Shots on Goal":
+                    stats["shots_on_target"] += int(s["value"] or 0)
+                if s["type"] == "Corner Kicks":
+                    stats["corners"] += int(s["value"] or 0)
     except:
-        return {"shots": 0, "shots_on": 0, "corners": 0}
+        pass
+
+    return stats
 
 # =========================
-# MOMENTUM SCORE
+# GOAL LOGIC
 # =========================
-def momentum_score(stats):
-    score = 0
+def count_second_half_goals(events):
+    count = 0
+    for e in events:
+        if e["type"] == "Goal" and e["time"]["elapsed"] >= 46:
+            count += 1
+    return count
 
-    if stats["shots"] >= 12:
-        score += 10
-    if stats["shots_on"] >= 5:
-        score += 15
-    if stats["corners"] >= 5:
-        score += 10
+# =========================
+# MOMENTUM ENGINE ⚡
+# =========================
+def momentum_engine(stats, minute):
+    boost = 0
 
-    return score
+    shots = stats["shots"]
+    sot = stats["shots_on_target"]
+    corners = stats["corners"]
+
+    # base momentum
+    if shots >= 10: boost += 10
+    if sot >= 4: boost += 15
+    if corners >= 5: boost += 8
+
+    # spike detection (late game pressure)
+    if minute >= 60:
+        if sot >= 5: boost += 10
+        if corners >= 6: boost += 5
+
+    return boost
+
+# =========================
+# TIER SYSTEM V2 🔥
+# =========================
+def classify(score):
+    if score >= 85:
+        return "🔥 ELITE"
+    elif score >= 70:
+        return "🔥 STRONG"
+    else:
+        return "⚡ MEDIUM"
+
+# =========================
+# SAVE MATCH
+# =========================
+def save_match(match_id, home, away, ht_score, msg_id, odds, score, tier):
+    data = load_data()
+
+    data.append({
+        "id": match_id,
+        "home": home,
+        "away": away,
+        "ht_score": ht_score,
+        "ft_score": None,
+        "status": "pending",
+        "msg_id": msg_id,
+        "score": score,
+        "tier": tier,
+        "odds": odds,
+        "date": str(datetime.now().date())
+    })
+
+    save_data(data)
+
+# =========================
+# RESULT CHECK
+# =========================
+def check_results():
+    data = load_data()
+    updated = False
+
+    for m in data:
+        if m["status"] != "pending":
+            continue
+
+        try:
+            url = f"{BASE_URL}/fixtures?id={m['id']}"
+            r = requests.get(url, headers=HEADERS)
+            event = r.json()["response"][0]
+
+            if event["fixture"]["status"]["short"] == "FT":
+                home = event["goals"]["home"]
+                away = event["goals"]["away"]
+
+                ft_goals = home + away
+                ht_home, ht_away = map(int, m["ht_score"].split("-"))
+                ht_goals = ht_home + ht_away
+
+                second_half_goals = ft_goals - ht_goals
+
+                result = "WIN" if second_half_goals >= 1 else "LOSS"
+
+                m["status"] = result
+                m["ft_score"] = f"{home}-{away}"
+
+                send_reply(m["msg_id"], result, m["ft_score"])
+                updated = True
+
+        except:
+            continue
+
+    if updated:
+        save_data(data)
+
+# =========================
+# DAILY REPORT 📊
+# =========================
+def daily_report():
+    data = load_data()
+    today = str(datetime.now().date())
+
+    matches = [m for m in data if m["date"] == today and m["status"] != "pending"]
+
+    if not matches:
+        return
+
+    wins = sum(1 for m in matches if m["status"] == "WIN")
+    total = len(matches)
+
+    winrate = round((wins / total) * 100, 2)
+
+    msg = f"""
+📊 DAILY REPORT
+
+Signals: {total}
+Wins: {wins}
+Winrate: {winrate}%
+"""
+    send_telegram(msg)
 
 # =========================
 # MAIN LOOP
 # =========================
 def run():
-    print("API-Football DIRECT bot running...")
+    print("API-Football bot running...")
+
+    last_report_day = None
 
     while True:
         try:
@@ -137,76 +239,74 @@ def run():
                     match_id = fixture["id"]
                     minute = fixture["status"]["elapsed"]
 
-                    if not minute:
+                    if minute is None:
                         continue
 
                     if match_id in seen_matches:
                         continue
 
-                    # =========================
-                    # EVENTS (GOALS)
-                    # =========================
+                    home = teams["home"]["name"]
+                    away = teams["away"]["name"]
+
                     events = get_events(match_id)
                     second_half_goals = count_second_half_goals(events)
 
-                    print(
-                        teams["home"]["name"],
-                        "vs",
-                        teams["away"]["name"],
-                        "| min:", minute,
-                        "| 2H goals:", second_half_goals
+                    print(f"{home} vs {away} | min:{minute} | 2H:{second_half_goals}")
+
+                    # =========================
+                    # MAIN FILTER ONLY
+                    # =========================
+                    valid_window = (
+                        (35 <= minute <= 50) or
+                        (55 <= minute <= 90 and second_half_goals <= 1)
                     )
 
-                    # =========================
-                    # CONDITIONS
-                    # =========================
-                    ht_window = 38 <= minute <= 47
-                    second_half_window = 55 <= minute <= 90 and second_half_goals <= 3
-
-                    if not (ht_window or second_half_window):
+                    if not valid_window:
                         continue
 
                     # =========================
-                    # REAL MOMENTUM
+                    # STATS (NOT FILTER)
                     # =========================
                     stats = get_stats(match_id)
-                    boost = momentum_score(stats)
+                    boost = momentum_engine(stats, minute)
 
                     score = 50 + boost
+                    tier = classify(score)
 
-                    tier = "⚡ MEDIUM"
-                    if score >= 70:
-                        tier = "🔥 STRONG"
+                    ht_score = f"{goals['home']}-{goals['away']}"
 
-                    # =========================
-                    # ALERT
-                    # =========================
                     msg = f"""
-{tier} GOAL ALERT
+{tier} SIGNAL
 
-{teams['home']['name']} vs {teams['away']['name']}
-Minute: {minute}'
-
-Score: {goals['home']}-{goals['away']}
-2H Goals: {second_half_goals}
+{home} vs {away}
+Min: {minute}'
+Score: {ht_score}
 
 Shots: {stats['shots']}
-SOT: {stats['shots_on']}
+SOT: {stats['shots_on_target']}
 Corners: {stats['corners']}
 
-Momentum Score: {score}
+Momentum: +{boost}
+Model Score: {score}
 
 ➡️ Over 1.5 2nd half
 """
-                    send_telegram(msg)
+
+                    msg_id = send_telegram(msg)
+
+                    save_match(match_id, home, away, ht_score, msg_id, None, score, tier)
 
                     seen_matches.add(match_id)
 
-                    time.sleep(random.uniform(1, 2))
-
                 except Exception as e:
                     print("Match error:", e)
-                    continue
+
+            check_results()
+
+            today = datetime.now().date()
+            if last_report_day != today:
+                daily_report()
+                last_report_day = today
 
             time.sleep(180)
 
