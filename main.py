@@ -7,17 +7,16 @@ import random
 # =========================
 import os
 
-API_KEY = os.getenv("b798571195msh3c97b8dc956c8bep1c16bbjsna432f73fe40e")
-HOST = os.getenv("portapi7.p.rapidapi.com")
-
 BOT_TOKEN = os.getenv("8748189864:AAHw-ud38HMooNiFy_NffvoYLHbDzgeFPB0")
 CHAT_ID = os.getenv("5741320219")
 
 BASE_URL = "https://sofascore.p.rapidapi.com/events/live"
 
 HEADERS = {
-    "X-RapidAPI-Key": API_KEY,
-    "X-RapidAPI-Host": HOST
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+    "Accept": "*/*",
+    "Referer": "https://www.sofascore.com/",
+    "Origin": "https://www.sofascore.com"
 }
 
 seen_matches = set()
