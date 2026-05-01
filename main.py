@@ -43,7 +43,23 @@ def get_live_matches():
             try:
                 minute = event.get("time", {}).get("played")
 
-                if minute and 38 <= minute <= 47:
+                if not minute:
+                    continue
+                
+                total_goals = event["homeScore"]["current"] + event["awayScore"]["current"]
+                
+                # halftime score (if available)
+                ht_home = event["homeScore"].get("period1", 0)
+                ht_away = event["awayScore"].get("period1", 0)
+                
+                ht_goals = ht_home + ht_away
+                second_half_goals = total_goals - ht_goals
+                
+                # ✅ CONDITIONS
+                ht_window = 38 <= minute <= 47
+                second_half_window = 55 <= minute <= 70 and second_half_goals <= 1 and total_goals <= 3
+                
+                if ht_window or second_half_window:
                     matches.append({
                         "id": event["id"],
                         "home": event["homeTeam"]["name"],
