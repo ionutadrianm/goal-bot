@@ -220,6 +220,7 @@ Winrate: {winrate}%
 # =========================
 # MAIN LOOP
 # =========================
+send_telegram("✅ BOT IS ALIVE")
 def run():
     print("API-Football bot running...")
 
@@ -261,8 +262,6 @@ def run():
                     # =========================
                     ht_window = 35 <= minute <= 50
                     second_half_window = 55 <= minute <= 80 and second_half_goals <= 3
-            
-                    valid_window = ht_window or second_half_window
             
                     # 🔍 DEBUG WHY SKIPPED
                     if not valid_window:
@@ -336,7 +335,7 @@ Model Score: {score}
                 daily_report()
                 last_report_day = today
 
-            time.sleep(180)
+            time.sleep(30)
 
         except Exception as e:
             print("Loop error:", e)
