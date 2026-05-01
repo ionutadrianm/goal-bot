@@ -7,6 +7,7 @@ import os
 # CONFIG
 # =========================
 API_KEY = os.getenv("API_FOOTBALL_KEY")
+print("API KEY:", API_KEY)
 
 BOT_TOKEN = os.getenv("8748189864:AAHw-ud38HMooNiFy_NffvoYLHbDzgeFPB0")
 CHAT_ID = os.getenv("5741320219")
