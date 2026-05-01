@@ -1,0 +1,192 @@
+import requests
+import time
+import random
+
+# =========================
+# CONFIG
+# =========================
+API_KEY = "b798571195msh3c97b8dc956c8bep1c16bbjsna432f73fe40e"
+HOST = "sportapi7.p.rapidapi.com"  # from RapidAPI page
+
+BOT_TOKEN = "8748189864:AAHw-ud38HMooNiFy_NffvoYLHbDzgeFPB0"
+CHAT_ID = "5741320219"
+
+BASE_URL = "https://sofascore.p.rapidapi.com/events/live"
+
+HEADERS = {
+    "X-RapidAPI-Key": API_KEY,
+    "X-RapidAPI-Host": HOST
+}
+
+seen_matches = set()
+
+# =========================
+# TELEGRAM
+# =========================
+def send_telegram(msg):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
+
+# =========================
+# GET LIVE MATCHES
+# =========================
+def get_live_matches():
+    try:
+        r = requests.get(BASE_URL, headers=HEADERS, timeout=10)
+        data = r.json()
+
+        matches = []
+
+        for event in data.get("events", []):
+            try:
+                minute = event.get("time", {}).get("played")
+
+                if minute and 38 <= minute <= 47:
+                    matches.append({
+                        "id": event["id"],
+                        "home": event["homeTeam"]["name"],
+                        "away": event["awayTeam"]["name"],
+                        "minute": minute,
+                        "homeScore": event["homeScore"]["current"],
+                        "awayScore": event["awayScore"]["current"]
+                    })
+            except:
+                continue
+
+        return matches
+
+    except Exception as e:
+        print("Live error:", e)
+        return []
+
+# =========================
+# GET STATS
+# =========================
+def get_stats(match_id):
+    try:
+        url = f"https://sofascore.p.rapidapi.com/event/statistics"
+        params = {"event_id": match_id}
+
+        r = requests.get(url, headers=HEADERS, params=params, timeout=10)
+        data = r.json()
+
+        stats = data["statistics"][0]["groups"][0]["statisticsItems"]
+
+        def get(name):
+            for s in stats:
+                if s["name"] == name:
+                    return float(s["home"]) + float(s["away"])
+            return 0
+
+        return (
+            get("Expected goals"),
+            get("Total shots"),
+            get("Shots on target"),
+            get("Corner kicks")
+        )
+
+    except:
+        return None, None, None, None
+
+# =========================
+# SCORING + MOMENTUM
+# =========================
+def calculate_score(xg, shots, sot, corners, score_diff):
+    score = 0
+
+    # xG
+    if xg >= 2.2: score += 30
+    elif xg >= 1.8: score += 25
+    elif xg >= 1.4: score += 20
+    elif xg >= 1.0: score += 10
+
+    # shots
+    if shots >= 18: score += 20
+    elif shots >= 14: score += 15
+    elif shots >= 10: score += 10
+
+    # SOT
+    if sot >= 8: score += 20
+    elif sot >= 6: score += 15
+    elif sot >= 4: score += 10
+
+    # corners
+    if corners >= 8: score += 10
+    elif corners >= 6: score += 8
+    elif corners >= 4: score += 5
+
+    # game state
+    if score_diff == 0: score += 20
+    elif score_diff == 1: score += 15
+
+    # 🔥 MOMENTUM BOOST
+    if xg >= 1.8 and sot >= 6 and corners >= 5:
+        score += 15
+
+    return score
+
+# =========================
+# TIER
+# =========================
+def classify(score):
+    if score >= 80:
+        return "🔥 STRONG"
+    elif score >= 65:
+        return "⚡ MEDIUM"
+    return None
+
+# =========================
+# MAIN LOOP
+# =========================
+def run():
+    print("RapidAPI SofaScore bot running...")
+
+    while True:
+        try:
+            matches = get_live_matches()
+            print(f"Found {len(matches)} matches")
+
+            for m in matches:
+                if m["id"] in seen_matches:
+                    continue
+
+                time.sleep(random.uniform(1, 3))
+
+                xg, shots, sot, corners = get_stats(m["id"])
+
+                if xg is None:
+                    continue
+
+                score_diff = abs(m["homeScore"] - m["awayScore"])
+
+                score = calculate_score(xg, shots, sot, corners, score_diff)
+                tier = classify(score)
+
+                if tier:
+                    msg = f"""
+{tier} 2H GOAL ALERT
+
+{m['home']} vs {m['away']}
+Minute: {m['minute']}'
+Score: {m['homeScore']}-{m['awayScore']}
+
+xG: {round(xg,2)}
+Shots: {shots}
+SOT: {sot}
+Corners: {corners}
+
+Model Score: {score}
+
+➡️ Over 1.5 2nd half
+"""
+                    send_telegram(msg)
+                    seen_matches.add(m["id"])
+
+            time.sleep(300)
+
+        except Exception as e:
+            print("Loop error:", e)
+            time.sleep(60)
+
+if __name__ == "__main__":
+    run()
