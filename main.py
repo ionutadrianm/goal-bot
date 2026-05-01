@@ -236,23 +236,51 @@ def run():
                     fixture = m["fixture"]
                     teams = m["teams"]
                     goals = m["goals"]
-
+            
                     match_id = fixture["id"]
                     minute = fixture["status"]["elapsed"]
-
+            
                     if minute is None:
                         continue
-
+            
                     if match_id in seen_matches:
                         continue
-
+            
                     home = teams["home"]["name"]
                     away = teams["away"]["name"]
-
+            
+                    # =========================
+                    # EVENTS (GOALS)
+                    # =========================
                     events = get_events(match_id)
                     second_half_goals = count_second_half_goals(events)
-
-                    print(f"{home} vs {away} | min:{minute} | 2H:{second_half_goals}")
+            
+                    print(f"{home} vs {away} | min: {minute} | 2H goals: {second_half_goals}")
+            
+                    # =========================
+                    # MAIN FILTER ONLY
+                    # =========================
+                    ht_window = 35 <= minute <= 50
+                    second_half_window = 55 <= minute <= 80 and second_half_goals <= 3
+            
+                    valid_window = ht_window or second_half_window
+            
+                    # 🔍 DEBUG WHY SKIPPED
+                    if not valid_window:
+                        print(f"❌ Skipped {home} vs {away} | min: {minute}")
+                        continue
+            
+                    # ✅ DEBUG PASSED
+                    print(f"✅ PASSED FILTER: {home} vs {away}")
+            
+                    # =========================
+                    # EXTRA SAFETY (OPTIONAL BUT GOOD)
+                    # =========================
+                    if goals["home"] is None or goals["away"] is None:
+                        print(f"⚠️ Missing score data: {home} vs {away}")
+                        continue
+            
+                    current_goals = goals["home"] + goals["away"]
 
                     # =========================
                     # MAIN FILTER ONLY
