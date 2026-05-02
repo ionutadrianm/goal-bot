@@ -32,8 +32,21 @@ def send_telegram(msg):
 def get_live_matches():
     url = f"{BASE_URL}/matches/v1/list-live"
     r = requests.get(url, headers=HEADERS)
-    data = r.json()
-    return data.get("events", [])
+
+    print("STATUS:", r.status_code)
+
+    try:
+        data = r.json()
+        print("FULL RESPONSE:", data)
+
+        events = data.get("events", [])
+        print("EVENT COUNT:", len(events))
+
+        return events
+
+    except Exception as e:
+        print("ERROR PARSING:", e)
+        return []
 
 # =========================
 # GET MATCH DETAIL
