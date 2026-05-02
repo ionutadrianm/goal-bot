@@ -98,6 +98,61 @@ def classify(score):
         return "⚡ MEDIUM"
 
 # =========================
+# RESULT TRACKER (STEP 2)
+# =========================
+def check_finished_matches():
+    print("📊 Checking finished matches...")
+
+    for match_id, data in list(seen_matches.items()):
+        try:
+            url = f"{BASE_URL}/fixtures?id={match_id}"
+            r = requests.get(url, headers=HEADERS)
+            res = r.json().get("response", [])
+
+            if not res:
+                continue
+
+            fixture = res[0]["fixture"]
+            goals = res[0]["goals"]
+
+            status = fixture["status"]["short"]
+
+            if status not in ["FT", "AET", "PEN"]:
+                continue
+
+            final_home = goals["home"] or 0
+            final_away = goals["away"] or 0
+            final_total = final_home + final_away
+
+            initial_total = sum(map(int, data["initial_score"].split("-")))
+
+            if final_total >= initial_total + 2:
+                result = "✅ WIN"
+            else:
+                result = "❌ LOSS"
+
+            print(f"{result} → Match {match_id}")
+
+            send_telegram(f"""
+📊 RESULT UPDATE
+
+Match ID: {match_id}
+Result: {result}
+
+Start Score: {data['initial_score']}
+Final Score: {final_home}-{final_away}
+
+Shots: {data['stats']['shots']}
+SOT: {data['stats']['sot']}
+Corners: {data['stats']['corners']}
+""")
+
+            del seen_matches[match_id]
+
+        except Exception as e:
+            print("Result check error:", e)
+            
+# =========================
 # MAIN LOOP
 # =========================
 def run():
@@ -239,8 +294,14 @@ Model Score: {game['final_score']}
                 """
 
                 send_telegram(msg)
-                seen_matches[game["match_id"]] = datetime.now()
-
+                seen_matches[game["match_id"]] = {
+                    "time": datetime.now(),
+                    "minute": game["minute"],
+                    "initial_score": game["score"],
+                    "stats": game["stats"]
+                }
+            check_finished_matches()
+                
             time.sleep(180)
 
         except Exception as e:
