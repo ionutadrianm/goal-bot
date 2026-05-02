@@ -138,10 +138,10 @@ def run():
                     # =========================
                     # FILTER (TIME FIRST)
                     # =========================
-                    if minute < 30 or minute > 75:
+                    if minute < 25 or minute > 80:
                         continue
 
-                    if total > 3 or diff > 2:
+                    if stats["shots"] < 2 and stats["corners"] < 1:
                         continue
 
                     # =========================
@@ -156,7 +156,8 @@ def run():
                     # STATS
                     # =========================
                     stats = get_stats(match_id)
-
+                    print(f"DEBUG → {home} vs {away} | min:{minute} | stats:{stats}")
+                    
                     # ❌ no stats available
                     if stats["shots"] == 0 and stats["sot"] == 0 and stats["corners"] == 0:
                         continue
@@ -206,6 +207,8 @@ def run():
                 except Exception as e:
                     print("Match error:", e)
 
+            print(f"📊 CANDIDATES FOUND: {len(candidates)}")
+            
             # =========================
             # SEND TOP 3
             # =========================
