@@ -100,6 +100,24 @@ def value_info(score):
     fair_odds = round(1 / prob, 2)
     return prob, fair_odds
 
+def test_flashscore():
+    url = "https://flashscore4.p.rapidapi.com/api/flashscore/v2/matches/details"
+
+    querystring = {"match_id": "GCxZ2uHc"}
+
+    headers = {
+        "x-rapidapi-key": API_KEY,
+        "x-rapidapi-host": "flashscore4.p.rapidapi.com"
+    }
+
+    r = requests.get(url, headers=headers, params=querystring)
+
+    print("STATUS:", r.status_code)
+    print("RESPONSE:", r.text[:500])
+
+if __name__ == "__main__":
+    test_flashscore()
+    
 # =========================
 # MAIN LOOP
 # =========================
