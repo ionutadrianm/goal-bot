@@ -110,12 +110,11 @@ def run():
             # TEMP: ALWAYS SCAN (TEST MODE)
             print("🧪 TEST MODE - scanning always")
 
-            print("⏱ SCAN WINDOW ACTIVE")
-
             matches = get_live_matches()
             print(f"Found {len(matches)} matches")
-
-            for m in matches[:5]:  # LIMIT = API SAFETY
+            candidates = []
+            
+            for m in matches[:15]:  # LIMIT = API SAFETY
                 try:
                     fixture = m["fixture"]
                     teams = m["teams"]
@@ -144,23 +143,30 @@ def run():
                     # =========================
                     # FILTER
                     # =========================
-                    # if not ((35 <= minute <= 50) or (55 <= minute <= 70)):
-                    #    continue
-
-                    if minute < 10:
+                    # =========================
+                    # FILTER (SMART VERSION)
+                    # =========================
+                    if minute < 35:
                         continue
-    
-                    # if total > 2 or diff > 1:
-                    #    continue
+                    
+                    if minute > 75:
+                        continue
+                    
+                    if total > 3:
+                        continue
+                    
+                    if diff > 2:
+                        continue
 
                     # =========================
                     # EVENTS
                     # =========================
-                    events = get_events(match_id)
-                    sh_goals = second_half_goals(events)
-
-                    if minute >= 55 and sh_goals > 1:
-                        continue
+                    if minute >= 55:
+                        events = get_events(match_id)
+                        sh_goals = second_half_goals(events)
+                
+                        if sh_goals > 1:
+                            continue
 
                     # =========================
                     # STATS
@@ -183,33 +189,50 @@ def run():
                     boost = momentum(stats, minute)
                     final_score = base + boost
 
+                    if final_score < 65:
+                        continue
+                            
                     tier = classify(final_score)
 
-                    print(f"✅ SIGNAL: {home} vs {away} | Score: {final_score}")
-
-                    msg = f"""
-{tier} SIGNAL
-
-{home} vs {away}
-Min: {minute}'
-Score: {home_goals}-{away_goals}
-
-Shots: {stats['shots']}
-SOT: {stats['sot']}
-Corners: {stats['corners']}
-
-Model Score: {final_score}
-
-➡️ Over 1.5 2nd half
-"""
-
-                    send_telegram(msg)
-                    seen_matches.add(match_id)
-
-                    time.sleep(2)
-
+                    candidates.append({
+                        "match_id": match_id,
+                        "home": home,
+                        "away": away,
+                        "minute": minute,
+                        "score": f"{home_goals}-{away_goals}",
+                        "stats": stats,
+                        "final_score": final_score,
+                        "tier": tier
+                    })
+   
                 except Exception as e:
                     print("Match error:", e)
+            # =========================
+            # SEND TOP 5 SIGNALS ONLY
+            # =========================
+            top = sorted(candidates, key=lambda x: x["final_score"], reverse=True)[:5]
+            
+            for game in top:
+                if game["match_id"] in seen_matches:
+                    continue
+            
+                msg = f"""{game['tier']} TOP SIGNAL
+                
+                {game['home']} vs {game['away']}
+                Min: {game['minute']}'
+                Score: {game['score']}
+                
+                Shots: {game['stats']['shots']}
+                SOT: {game['stats']['sot']}
+                Corners: {game['stats']['corners']}
+                
+                Model Score: {game['final_score']}
+                
+                ➡️ Over 1.5 2nd half
+                """
+            
+                send_telegram(msg)
+                seen_matches.add(game["match_id"])
 
             time.sleep(180)
 
