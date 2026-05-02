@@ -142,11 +142,6 @@ def check_finished_matches():
             
             if not any(x in status for x in ["FT", "AET", "PEN"]):
                 print(f"⏱ Still live: {status}")
-                
-                # Only print RAW occasionally (not every loop)
-                if minute and minute > 80:
-                    print("RAW FIXTURE:", fixture)
-                    
                 continue
 
             final_home = goals["home"] or 0
