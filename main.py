@@ -1,180 +1,173 @@
 import requests
 import time
-import os
-from datetime import datetime
+import random
 
 # =========================
 # CONFIG
 # =========================
-API_KEY = os.getenv("RAPIDAPI_KEY")
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHAT_ID = os.getenv("CHAT_ID")
+BOT_TOKEN = "YOUR_BOT_TOKEN"
+CHAT_ID = "YOUR_CHAT_ID"
 
-BASE_URL = "https://flashscore4.p.rapidapi.com"
+BASE_URL = "https://api.sofascore.com/api/v1/sport/football/events/live"
 
 HEADERS = {
-    "X-RapidAPI-Key": API_KEY,
-    "X-RapidAPI-Host": "flashscore4.p.rapidapi.com"
+    "User-Agent": "Mozilla/5.0",
+    "Accept": "application/json"
 }
 
-seen_matches = set()
+seen = set()
 
 # =========================
 # TELEGRAM
 # =========================
-def send_telegram(msg):
+def send(msg):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
 
 # =========================
-# GET MATCHES
+# SAFE REQUEST
 # =========================
-def get_live_matches():
-    url = "https://flashscore4.p.rapidapi.com/matches/v1/list-live"
+def safe_get(url):
+    try:
+        time.sleep(random.uniform(1.5, 3))
+        r = requests.get(url, headers=HEADERS)
 
-    r = requests.get(url, headers=HEADERS)
+        if r.status_code != 200:
+            print("Bad:", r.status_code)
+            return None
 
-    print("STATUS:", r.status_code)
-    print("RAW:", r.text[:300])
+        return r.json()
+    except:
+        return None
+
+# =========================
+# LIVE MATCHES
+# =========================
+def get_live():
+    data = safe_get(BASE_URL)
+
+    if not data or "events" not in data:
+        return []
+
+    return data["events"]
+
+# =========================
+# STATS
+# =========================
+def get_stats(match_id):
+    url = f"https://api.sofascore.com/api/v1/event/{match_id}/statistics"
+    data = safe_get(url)
+
+    if not data:
+        return None
 
     try:
-        data = r.json()
+        stats = data["statistics"][0]["groups"][0]["statisticsItems"]
 
-        # ⚠️ correct key is NOT always "events"
-        events = data.get("data", {}).get("events", [])
+        def get(name):
+            for s in stats:
+                if s["name"] == name:
+                    return float(s["home"]) + float(s["away"])
+            return 0
 
-        print("EVENT COUNT:", len(events))
+        return {
+            "shots": get("Total shots"),
+            "sot": get("Shots on target"),
+            "corners": get("Corner kicks"),
+            "xg": get("Expected goals")
+        }
 
-        return events
+    except:
+        return None
 
-    except Exception as e:
-        print("ERROR:", e)
+# =========================
+# EVENTS
+# =========================
+def get_events(match_id):
+    url = f"https://api.sofascore.com/api/v1/event/{match_id}/incidents"
+    data = safe_get(url)
+
+    if not data:
         return []
-        
-# =========================
-# GET MATCH DETAIL
-# =========================
-def get_match_detail(event_id):
-    url = f"{BASE_URL}/matches/v1/detail"
-    params = {"eventId": event_id}
-    r = requests.get(url, headers=HEADERS, params=params)
-    return r.json()
 
-# =========================
-# COUNT 2H GOALS
-# =========================
-def count_second_half_goals(events):
-    goals = 0
+    return data.get("incidents", [])
+
+def count_2h(events):
+    count = 0
     for e in events:
-        if e.get("type") == "goal":
-            minute = e.get("time", 0)
-            if minute >= 46:
-                goals += 1
-    return goals
+        if e.get("incidentType") == "goal":
+            if e.get("time", 0) >= 46:
+                count += 1
+    return count
 
 # =========================
-# MOMENTUM ENGINE
+# LOGIC
 # =========================
-def momentum_engine(stats, minute):
-    boost = 0
+def momentum(stats, minute):
+    score = 0
 
-    shots = stats.get("shots", 0)
-    sot = stats.get("shots_on", 0)
-    corners = stats.get("corners", 0)
-
-    if shots >= 10: boost += 10
-    if sot >= 4: boost += 15
-    if corners >= 5: boost += 8
+    if stats["shots"] >= 10: score += 10
+    if stats["sot"] >= 4: score += 15
+    if stats["corners"] >= 5: score += 8
 
     if minute >= 60:
-        if sot >= 5: boost += 10
-        if corners >= 6: boost += 5
+        if stats["sot"] >= 5: score += 10
 
-    return boost
+    return score
 
-# =========================
-# VALUE (INFO ONLY)
-# =========================
-def value_info(score):
-    prob = min(0.80, score / 120)
-    fair_odds = round(1 / prob, 2)
-    return prob, fair_odds
+def classify(score):
+    if score >= 85:
+        return "🔥 ELITE"
+    elif score >= 70:
+        return "🔥 STRONG"
+    return "⚡ MEDIUM"
 
-def test_flashscore():
-    url = "https://flashscore4.p.rapidapi.com/api/flashscore/v2/matches/details"
-
-    querystring = {"match_id": "GCxZ2uHc"}
-
-    headers = {
-        "x-rapidapi-key": API_KEY,
-        "x-rapidapi-host": "flashscore4.p.rapidapi.com"
-    }
-
-    r = requests.get(url, headers=headers, params=querystring)
-
-    print("STATUS:", r.status_code)
-    print("RESPONSE:", r.text[:500])
-
-if __name__ == "__main__":
-    test_flashscore()
-    
 # =========================
 # MAIN LOOP
 # =========================
 def run():
-    print("⚡ Flashscore bot running...")
+    print("⚽ SofaScore bot running...")
 
     while True:
         try:
-            matches = get_live_matches()
+            matches = get_live()
             print(f"Matches: {len(matches)}")
 
-            for m in matches:
-                print("TEST MATCH:", m)
-                
+            for m in matches[:8]:
                 try:
                     match_id = m["id"]
-                    minute = m.get("time", 0)
+                    minute = m.get("time", {}).get("played")
 
-                    home = m["home"]["name"]
-                    away = m["away"]["name"]
-
-                    if match_id in seen_matches:
+                    if not minute or match_id in seen:
                         continue
 
-                    # 🔥 FILTER FIRST
+                    home = m["homeTeam"]["name"]
+                    away = m["awayTeam"]["name"]
+
+                    # =========================
+                    # MAIN FILTER
+                    # =========================
                     if not (
                         (35 <= minute <= 50) or
                         (55 <= minute <= 80)
                     ):
                         continue
 
-                    detail = get_match_detail(match_id)
+                    events = get_events(match_id)
+                    goals_2h = count_2h(events)
 
-                    events = detail.get("events", [])
-                    stats = detail.get("stats", {})
-
-                    second_half_goals = count_second_half_goals(events)
-
-                    if minute >= 55 and second_half_goals > 1:
+                    if minute >= 55 and goals_2h > 1:
                         continue
 
-                    print(f"✅ {home} vs {away} | {minute} | 2H:{second_half_goals}")
+                    stats = get_stats(match_id)
 
-                    # =========================
-                    # STATS + MODEL
-                    # =========================
-                    boost = momentum_engine(stats, minute)
-                    score = 50 + boost
+                    if not stats:
+                        continue
 
-                    if score >= 85:
-                        tier = "🔥 ELITE"
-                    elif score >= 70:
-                        tier = "🔥 STRONG"
-                    else:
-                        tier = "⚡ MEDIUM"
+                    score = 50 + momentum(stats, minute)
+                    tier = classify(score)
 
-                    prob, fair_odds = value_info(score)
+                    print(f"✅ {home} vs {away} | {minute}")
 
                     msg = f"""
 {tier} SIGNAL
@@ -182,30 +175,21 @@ def run():
 {home} vs {away}
 Min: {minute}'
 
-2H Goals: {second_half_goals}
-
-Shots: {stats.get('shots', 0)}
-SOT: {stats.get('shots_on', 0)}
-Corners: {stats.get('corners', 0)}
-
-Momentum: +{boost}
-Score: {score}
-
-Model Prob: {round(prob,2)}
-Fair Odds: {fair_odds}
+Shots: {stats['shots']}
+SOT: {stats['sot']}
+Corners: {stats['corners']}
+xG: {round(stats['xg'],2)}
 
 ➡️ Over 1.5 2nd half
 """
 
-                    send_telegram(msg)
-                    seen_matches.add(match_id)
-
-                    time.sleep(1.2)
+                    send(msg)
+                    seen.add(match_id)
 
                 except Exception as e:
                     print("Match error:", e)
 
-            time.sleep(180)
+            time.sleep(300)
 
         except Exception as e:
             print("Loop error:", e)
