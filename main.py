@@ -144,11 +144,14 @@ def run():
                     # =========================
                     # FILTER
                     # =========================
-                    if not ((35 <= minute <= 50) or (55 <= minute <= 70)):
-                        continue
+                    # if not ((35 <= minute <= 50) or (55 <= minute <= 70)):
+                    #    continue
 
-                    if total > 2 or diff > 1:
+                    if minute < 10:
                         continue
+    
+                    # if total > 2 or diff > 1:
+                    #    continue
 
                     # =========================
                     # EVENTS
