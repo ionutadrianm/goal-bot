@@ -227,8 +227,9 @@ def run():
                     total = home_goals + away_goals
                     diff = abs(home_goals - away_goals)
                     goals_at_signal = total
-                    # ❌ skip dead games (no comeback potential)
-                    if total >= 3 and diff >= 2:
+                    
+                    # 🔥 STRICT DEAD GAME FILTER
+                    if total >= 3:
                         continue
     
                     # =========================
