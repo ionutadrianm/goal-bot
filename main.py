@@ -140,7 +140,13 @@ def check_finished_matches():
 
             status = fixture["status"]["short"]
             
-            if status not in ["FT", "AET", "PEN"]:
+            if not any(x in status for x in ["FT", "AET", "PEN"]):
+                print(f"⏱ Still live: {status}")
+                
+                # Only print RAW occasionally (not every loop)
+                if minute and minute > 80:
+                    print("RAW FIXTURE:", fixture)
+                    
                 continue
 
             final_home = goals["home"] or 0
@@ -362,6 +368,7 @@ Model Score: {game['final_score']}
             # ⏱ Run result check every 60 minutes
             if seen_matches and current_time - last_result_check > 3600:
                 check_finished_matches()
+                print(f"Checking API response for match {match_id}: {res}")
                 last_result_check = current_time
                 
             time.sleep(300)
