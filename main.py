@@ -30,23 +30,29 @@ def send_telegram(msg):
 # GET MATCHES
 # =========================
 def get_live_matches():
-    url = f"{BASE_URL}/matches/v1/list-live"
-    r = requests.get(url, headers=HEADERS)
+    url = f"{BASE_URL}/matches/v1/list"
+    params = {"sportId": 1}
+
+    r = requests.get(url, headers=HEADERS, params=params)
 
     print("STATUS:", r.status_code)
 
-    try:
-        data = r.json()
-        print("FULL RESPONSE:", data)
+    data = r.json()
+    print("KEYS:", data.keys())
 
-        events = data.get("events", [])
-        print("EVENT COUNT:", len(events))
+    events = data.get("events", [])
+    print("EVENT COUNT:", len(events))
 
-        return events
+    # filter only LIVE matches manually
+    live_matches = []
 
-    except Exception as e:
-        print("ERROR PARSING:", e)
-        return []
+    for e in events:
+        if e.get("status", {}).get("type") == "live":
+            live_matches.append(e)
+
+    print("LIVE FILTERED:", len(live_matches))
+
+    return live_matches
 
 # =========================
 # GET MATCH DETAIL
