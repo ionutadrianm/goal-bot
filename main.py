@@ -187,11 +187,11 @@ def run():
                     # DYNAMIC THRESHOLD
                     # =========================
                     if minute < 55:
-                        if final_score < 55:
+                        if final_score < 45:
                             continue
-                    else:
-                        if final_score < 65:
-                            continue
+                    # else:
+                    #    if final_score < 65:
+                    #        continue
                             
                     print(f"✅ PASS → {home} vs {away} | min:{minute} | score:{final_score}")
                     candidates.append({
