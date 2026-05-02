@@ -123,7 +123,6 @@ def run():
                     if not minute:
                         continue
 
-                    # prevent duplicates (already sent)
                     if match_id in seen_matches:
                         continue
 
@@ -136,10 +135,8 @@ def run():
                     total = home_goals + away_goals
                     diff = abs(home_goals - away_goals)
 
-                    print(f"{home} vs {away} | {minute}' | {home_goals}-{away_goals}")
-
                     # =========================
-                    # FILTER
+                    # FILTER (TIME FIRST)
                     # =========================
                     if minute < 30 or minute > 75:
                         continue
@@ -147,37 +144,28 @@ def run():
                     if total > 3 or diff > 2:
                         continue
 
-                    if minute < 30 and total == 0:
-                            continue
-                        
                     # =========================
                     # EVENTS
                     # =========================
                     if minute >= 55:
                         events = get_events(match_id)
-                        sh_goals = second_half_goals(events)
-
-                        if sh_goals > 1:
+                        if second_half_goals(events) > 1:
                             continue
 
                     # =========================
                     # STATS
                     # =========================
                     stats = get_stats(match_id)
-                    print("STATS:", stats)
 
-                    # ❌ skip fake/no-data matches
-                    # 🔥 DATA AVAILABILITY FILTER
-                    stats = get_stats(match_id)
-                    print("STATS:", stats)
-                    
-                    # ❌ No data at all → skip
+                    # ❌ no stats available
                     if stats["shots"] == 0 and stats["sot"] == 0 and stats["corners"] == 0:
                         continue
-                    
-                    # ❌ Very low activity → skip (tuneable)
+
+                    # ❌ weak activity
                     if stats["shots"] < 3 and stats["corners"] < 1:
                         continue
+
+                    print(f"{home} vs {away} | {minute}' | {home_goals}-{away_goals} | {stats}")
 
                     # =========================
                     # SCORING
@@ -192,8 +180,7 @@ def run():
                     if diff == 0:
                         base += 15
 
-                    boost = momentum(stats, minute)
-                    final_score = base + boost
+                    final_score = base + momentum(stats, minute)
 
                     # =========================
                     # DYNAMIC THRESHOLD
@@ -205,8 +192,6 @@ def run():
                         if final_score < 65:
                             continue
 
-                    tier = classify(final_score)
-
                     candidates.append({
                         "match_id": match_id,
                         "home": home,
@@ -215,14 +200,14 @@ def run():
                         "score": f"{home_goals}-{away_goals}",
                         "stats": stats,
                         "final_score": final_score,
-                        "tier": tier
+                        "tier": classify(final_score)
                     })
 
                 except Exception as e:
                     print("Match error:", e)
 
             # =========================
-            # SEND TOP 3 SIGNALS
+            # SEND TOP 3
             # =========================
             top = sorted(candidates, key=lambda x: x["final_score"], reverse=True)[:3]
 
@@ -246,8 +231,6 @@ Model Score: {game['final_score']}
 """
 
                 send_telegram(msg)
-
-                # mark as sent (store timestamp)
                 seen_matches[game["match_id"]] = datetime.now()
 
             time.sleep(180)
