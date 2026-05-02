@@ -17,7 +17,7 @@ HEADERS = {
     "x-apisports-key": API_KEY
 }
 
-seen_matches = set()
+seen_matches = {}
 
 # =========================
 # TELEGRAM
@@ -40,26 +40,36 @@ def get_events(fixture_id):
     return r.json().get("response", [])
 
 def get_stats(fixture_id):
+    if stats["shots"] == 0 and stats["sot"] == 0:
+    continue
+
     url = f"{BASE_URL}/fixtures/statistics?fixture={fixture_id}"
     r = requests.get(url, headers=HEADERS)
     data = r.json().get("response", [])
 
     stats = {"shots":0, "sot":0, "corners":0}
 
-    try:
-        for team in data:
-            for s in team["statistics"]:
-                if s["type"] == "Total Shots":
-                    stats["shots"] += int(s["value"] or 0)
-                elif s["type"] == "Shots on Goal":
-                    stats["sot"] += int(s["value"] or 0)
-                elif s["type"] == "Corner Kicks":
-                    stats["corners"] += int(s["value"] or 0)
-    except:
-        pass
+    if not data:
+        return stats
+
+    for team in data:
+        for s in team.get("statistics", []):
+            val = s.get("value")
+
+            try:
+                val = int(val) if val is not None else 0
+            except:
+                val = 0
+
+            if s["type"] == "Total Shots":
+                stats["shots"] += val
+            elif s["type"] == "Shots on Goal":
+                stats["sot"] += val
+            elif s["type"] == "Corner Kicks":
+                stats["corners"] += val
 
     return stats
-
+    
 # =========================
 # GOAL LOGIC
 # =========================
@@ -172,7 +182,8 @@ def run():
                     # STATS
                     # =========================
                     stats = get_stats(match_id)
-
+                    print("STATS:", stats)
+                    
                     # =========================
                     # SCORING
                     # =========================
@@ -199,6 +210,9 @@ def run():
                             
                     tier = classify(final_score)
 
+                    if match_id in seen_matches:
+                        continue
+                        
                     candidates.append({
                         "match_id": match_id,
                         "home": home,
@@ -215,7 +229,7 @@ def run():
             # =========================
             # SEND TOP 5 SIGNALS ONLY
             # =========================
-            top = sorted(candidates, key=lambda x: x["final_score"], reverse=True)[:5]
+            top = sorted(candidates, key=lambda x: x["final_score"], reverse=True)[:3]
             
             for game in top:
                 if game["match_id"] in seen_matches:
