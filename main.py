@@ -1,107 +1,73 @@
 import requests
 import time
-import random
+import os
+from datetime import datetime
 
 # =========================
 # CONFIG
 # =========================
-BOT_TOKEN = "YOUR_BOT_TOKEN"
-CHAT_ID = "YOUR_CHAT_ID"
+API_KEY = os.getenv("API_FOOTBALL_KEY")
 
-BASE_URL = "https://api.sofascore.com/api/v1/sport/football/events/live"
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
+
+BASE_URL = "https://v3.football.api-sports.io"
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0",
-    "Accept": "application/json"
+    "x-apisports-key": API_KEY
 }
 
-seen = set()
+seen_matches = set()
 
 # =========================
 # TELEGRAM
 # =========================
-def send(msg):
+def send_telegram(msg):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
 
 # =========================
-# SAFE REQUEST
+# API CALLS (OPTIMIZED)
 # =========================
-def safe_get(url):
-    try:
-        time.sleep(random.uniform(1.5, 3))
-        r = requests.get(url, headers=HEADERS)
+def get_live_matches():
+    url = f"{BASE_URL}/fixtures?live=all"
+    r = requests.get(url, headers=HEADERS)
+    return r.json().get("response", [])
 
-        if r.status_code != 200:
-            print("Bad:", r.status_code)
-            return None
+def get_events(fixture_id):
+    url = f"{BASE_URL}/fixtures/events?fixture={fixture_id}"
+    r = requests.get(url, headers=HEADERS)
+    return r.json().get("response", [])
 
-        return r.json()
-    except:
-        return None
+def get_stats(fixture_id):
+    url = f"{BASE_URL}/fixtures/statistics?fixture={fixture_id}"
+    r = requests.get(url, headers=HEADERS)
+    data = r.json().get("response", [])
 
-# =========================
-# LIVE MATCHES
-# =========================
-def get_live():
-    data = safe_get(BASE_URL)
-
-    if not data or "events" not in data:
-        return []
-
-    return data["events"]
-
-# =========================
-# STATS
-# =========================
-def get_stats(match_id):
-    url = f"https://api.sofascore.com/api/v1/event/{match_id}/statistics"
-    data = safe_get(url)
-
-    if not data:
-        return None
+    stats = {"shots":0, "sot":0, "corners":0}
 
     try:
-        stats = data["statistics"][0]["groups"][0]["statisticsItems"]
-
-        def get(name):
-            for s in stats:
-                if s["name"] == name:
-                    return float(s["home"]) + float(s["away"])
-            return 0
-
-        return {
-            "shots": get("Total shots"),
-            "sot": get("Shots on target"),
-            "corners": get("Corner kicks"),
-            "xg": get("Expected goals")
-        }
-
+        for team in data:
+            for s in team["statistics"]:
+                if s["type"] == "Total Shots":
+                    stats["shots"] += int(s["value"] or 0)
+                elif s["type"] == "Shots on Goal":
+                    stats["sot"] += int(s["value"] or 0)
+                elif s["type"] == "Corner Kicks":
+                    stats["corners"] += int(s["value"] or 0)
     except:
-        return None
+        pass
+
+    return stats
 
 # =========================
-# EVENTS
+# GOAL LOGIC
 # =========================
-def get_events(match_id):
-    url = f"https://api.sofascore.com/api/v1/event/{match_id}/incidents"
-    data = safe_get(url)
-
-    if not data:
-        return []
-
-    return data.get("incidents", [])
-
-def count_2h(events):
-    count = 0
-    for e in events:
-        if e.get("incidentType") == "goal":
-            if e.get("time", 0) >= 46:
-                count += 1
-    return count
+def second_half_goals(events):
+    return sum(1 for e in events if e["type"] == "Goal" and e["time"]["elapsed"] >= 46)
 
 # =========================
-# LOGIC
+# MOMENTUM ENGINE
 # =========================
 def momentum(stats, minute):
     score = 0
@@ -115,81 +81,136 @@ def momentum(stats, minute):
 
     return score
 
+# =========================
+# TIER SYSTEM V2
+# =========================
 def classify(score):
     if score >= 85:
         return "🔥 ELITE"
     elif score >= 70:
         return "🔥 STRONG"
-    return "⚡ MEDIUM"
+    else:
+        return "⚡ MEDIUM"
+
+# =========================
+# SMART SCAN WINDOW
+# =========================
+def should_scan():
+    m = datetime.now().minute
+    return (38 <= m <= 47) or (55 <= m <= 70)
 
 # =========================
 # MAIN LOOP
 # =========================
 def run():
-    print("⚽ SofaScore bot running...")
+    print("🚀 API-Football Scanner Running")
 
     while True:
         try:
-            matches = get_live()
-            print(f"Matches: {len(matches)}")
+            if not should_scan():
+                print("⏸ Outside scan window")
+                time.sleep(60)
+                continue
 
-            for m in matches[:8]:
+            print("⏱ SCAN WINDOW ACTIVE")
+
+            matches = get_live_matches()
+            print(f"Found {len(matches)} matches")
+
+            for m in matches[:5]:  # LIMIT = API SAFETY
                 try:
-                    match_id = m["id"]
-                    minute = m.get("time", {}).get("played")
+                    fixture = m["fixture"]
+                    teams = m["teams"]
+                    goals = m["goals"]
 
-                    if not minute or match_id in seen:
+                    match_id = fixture["id"]
+                    minute = fixture["status"]["elapsed"]
+
+                    if not minute:
                         continue
 
-                    home = m["homeTeam"]["name"]
-                    away = m["awayTeam"]["name"]
-
-                    # =========================
-                    # MAIN FILTER
-                    # =========================
-                    if not (
-                        (35 <= minute <= 50) or
-                        (55 <= minute <= 80)
-                    ):
+                    if match_id in seen_matches:
                         continue
 
+                    home = teams["home"]["name"]
+                    away = teams["away"]["name"]
+
+                    home_goals = goals["home"] or 0
+                    away_goals = goals["away"] or 0
+
+                    total = home_goals + away_goals
+                    diff = abs(home_goals - away_goals)
+
+                    print(f"{home} vs {away} | {minute}' | {home_goals}-{away_goals}")
+
+                    # =========================
+                    # FILTER
+                    # =========================
+                    if not ((35 <= minute <= 50) or (55 <= minute <= 70)):
+                        continue
+
+                    if total > 2 or diff > 1:
+                        continue
+
+                    # =========================
+                    # EVENTS
+                    # =========================
                     events = get_events(match_id)
-                    goals_2h = count_2h(events)
+                    sh_goals = second_half_goals(events)
 
-                    if minute >= 55 and goals_2h > 1:
+                    if minute >= 55 and sh_goals > 1:
                         continue
 
+                    # =========================
+                    # STATS
+                    # =========================
                     stats = get_stats(match_id)
 
-                    if not stats:
-                        continue
+                    # =========================
+                    # SCORING
+                    # =========================
+                    base = 50
 
-                    score = 50 + momentum(stats, minute)
-                    tier = classify(score)
+                    if total == 0:
+                        base += 20
+                    elif total == 1:
+                        base += 10
 
-                    print(f"✅ {home} vs {away} | {minute}")
+                    if diff == 0:
+                        base += 15
+
+                    boost = momentum(stats, minute)
+                    final_score = base + boost
+
+                    tier = classify(final_score)
+
+                    print(f"✅ SIGNAL: {home} vs {away} | Score: {final_score}")
 
                     msg = f"""
 {tier} SIGNAL
 
 {home} vs {away}
 Min: {minute}'
+Score: {home_goals}-{away_goals}
 
 Shots: {stats['shots']}
 SOT: {stats['sot']}
 Corners: {stats['corners']}
-xG: {round(stats['xg'],2)}
+
+Model Score: {final_score}
 
 ➡️ Over 1.5 2nd half
 """
 
-                    send(msg)
-                    seen.add(match_id)
+                    send_telegram(msg)
+                    seen_matches.add(match_id)
+
+                    time.sleep(2)
 
                 except Exception as e:
                     print("Match error:", e)
 
-            time.sleep(300)
+            time.sleep(180)
 
         except Exception as e:
             print("Loop error:", e)
