@@ -127,6 +127,13 @@ def check_finished_matches():
     print("📊 Checking finished matches...")
 
     for match_id, data in list(seen_matches.items()):
+        # ⏱ Only check matches older than 60 minutes
+        time_since_signal = (datetime.now() - data["time"]).total_seconds()
+        
+        if time_since_signal < 5400:
+            print(f"⏳ Too early to check match {match_id} ({int(time_since_signal/60)} min)")
+            continue
+    
         try:
             url = f"{BASE_URL}/fixtures?id={match_id}"
             r = requests.get(url, headers=HEADERS)
