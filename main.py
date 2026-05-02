@@ -36,7 +36,8 @@ def get_live_matches():
     r = requests.get(url, headers=HEADERS, params=params)
 
     print("STATUS:", r.status_code)
-
+    print("RAW:", r.text[:500])
+    
     data = r.json()
     print("KEYS:", data.keys())
 
@@ -115,7 +116,8 @@ def run():
             print(f"Matches: {len(matches)}")
 
             for m in matches:
-
+                print("TEST MATCH:", m)
+                
                 try:
                     match_id = m["id"]
                     minute = m.get("time", 0)
