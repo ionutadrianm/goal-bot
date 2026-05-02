@@ -161,12 +161,12 @@ def check_finished_matches():
                 "final_score": f"{final_home}-{final_away}",
                 "model_score": data["model_score"],
                 "stats": data["stats"],
+                "goals_at_signal": data["goals_at_signal"],   # ✅ NEW
                 "base_components": data["base_components"],
                 "momentum_components": data["momentum_components"]
             })
         
-            print(f"{result} → Match {match_id}")
-            print("📦 RESULT:", line)    
+            print(f"{result} → Match {match_id}")  
 
             send_telegram(f"""
 📊 RESULT UPDATE
@@ -226,6 +226,7 @@ def run():
 
                     total = home_goals + away_goals
                     diff = abs(home_goals - away_goals)
+                    goals_at_signal = total
                     # ❌ skip dead games (no comeback potential)
                     if total >= 3 and diff >= 2:
                         continue
@@ -271,24 +272,24 @@ def run():
                     # SCORING
                     # =========================
                     base = 50
-                    
-                    # base conditions
+
                     zero_goal_bonus = 20 if total == 0 else 0
                     one_goal_bonus = 10 if total == 1 else 0
                     draw_bonus = 15 if diff == 0 else 0
                     second_half_boost = 10 if (minute >= 50 and stats["shots"] >= 6) else 0
                     
-                    # apply to base
-                    base += zero_goal_bonus
-                    base += one_goal_bonus
-                    base += draw_bonus
-                    base += second_half_boost
+                    # apply once
+                    base += zero_goal_bonus + one_goal_bonus + draw_bonus + second_half_boost
                     
-                    # 🔥 2ND HALF GOAL SETUP BOOST
-                    if minute >= 50:
-                        if stats["shots"] >= 6:
-                            base += 10
-        
+                    # ✅ DEFINE base_components (MISSING BEFORE)
+                    base_components = {
+                        "base": 50,
+                        "zero_goal_bonus": zero_goal_bonus,
+                        "one_goal_bonus": one_goal_bonus,
+                        "draw_bonus": draw_bonus,
+                        "second_half_boost": second_half_boost
+                    }
+                    
                     momentum_score, momentum_components = momentum(stats, minute)
                     final_score = base + momentum_score
 
@@ -311,9 +312,10 @@ def run():
                         "score": f"{home_goals}-{away_goals}",
                         "stats": stats,
                         "final_score": final_score,
-                        "tier": classify(final_score)
+                        "tier": classify(final_score),
                         "base_components": base_components,
-                        "momentum_components": momentum_components
+                        "momentum_components": momentum_components,
+                        "goals_at_signal": goals_at_signal,
                     })
 
                 except Exception as e:
@@ -351,6 +353,7 @@ Model Score: {game['final_score']}
                     "initial_score": game["score"],
                     "stats": game["stats"],
                     "model_score": game["final_score"],
+                    "goals_at_signal": game["goals_at_signal"],
                     "base_components": game["base_components"],
                     "momentum_components": game["momentum_components"]
                 }
