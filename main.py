@@ -44,10 +44,11 @@ def get_stats(fixture_id):
     r = requests.get(url, headers=HEADERS)
     data = r.json().get("response", [])
 
-    stats = {"shots": 0, "sot": 0, "corners": 0}
-
+    # 🔥 KEY CHECK
     if not data:
-        return stats
+        return None   # instead of empty stats
+
+    stats = {"shots": 0, "sot": 0, "corners": 0}
 
     for team in data:
         for s in team.get("statistics", []):
@@ -156,6 +157,10 @@ def run():
                     # STATS
                     # =========================
                     stats = get_stats(match_id)
+
+                    # ❌ no stats available at all
+                    if stats is None:
+                        continue
                     print(f"DEBUG → {home} vs {away} | min:{minute} | stats:{stats}")
                     
                     # ❌ no stats available
@@ -221,18 +226,18 @@ def run():
 
                 msg = f"""{game['tier']} TOP SIGNAL
 
-{game['home']} vs {game['away']}
-Min: {game['minute']}'
-Score: {game['score']}
-
-Shots: {game['stats']['shots']}
-SOT: {game['stats']['sot']}
-Corners: {game['stats']['corners']}
-
-Model Score: {game['final_score']}
-
-➡️ Over 1.5 2nd half
-"""
+                {game['home']} vs {game['away']}
+                Min: {game['minute']}'
+                Score: {game['score']}
+                
+                Shots: {game['stats']['shots']}
+                SOT: {game['stats']['sot']}
+                Corners: {game['stats']['corners']}
+                
+                Model Score: {game['final_score']}
+                
+                ➡️ Over 1.5 2nd half
+                """
 
                 send_telegram(msg)
                 seen_matches[game["match_id"]] = datetime.now()
