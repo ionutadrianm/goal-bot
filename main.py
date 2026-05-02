@@ -18,6 +18,7 @@ HEADERS = {
 
 # store match_id -> timestamp
 seen_matches = {}
+last_result_check = 0
 
 # =========================
 # TELEGRAM
@@ -157,7 +158,8 @@ Corners: {data['stats']['corners']}
 # =========================
 def run():
     print("🚀 API-Football Scanner Running")
-
+    global last_result_check
+    
     while True:
         try:
             print("🧪 TEST MODE - scanning always")
@@ -308,9 +310,14 @@ Model Score: {game['final_score']}
                     "initial_score": game["score"],
                     "stats": game["stats"]
                 }
-            check_finished_matches()
+            current_time = time.time()
+
+            # ⏱ Run result check every 60 minutes
+            if seen_matches and current_time - last_result_check > 3600:
+                check_finished_matches()
+                last_result_check = current_time
                 
-            time.sleep(180)
+            time.sleep(300)
 
         except Exception as e:
             print("Loop error:", e)
