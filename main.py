@@ -7,7 +7,6 @@ from datetime import datetime
 # CONFIG
 # =========================
 API_KEY = os.getenv("API_FOOTBALL_KEY")
-
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
@@ -17,6 +16,7 @@ HEADERS = {
     "x-apisports-key": API_KEY
 }
 
+# store match_id -> timestamp
 seen_matches = {}
 
 # =========================
@@ -27,7 +27,7 @@ def send_telegram(msg):
     requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
 
 # =========================
-# API CALLS (OPTIMIZED)
+# API CALLS
 # =========================
 def get_live_matches():
     url = f"{BASE_URL}/fixtures?live=all"
@@ -40,14 +40,11 @@ def get_events(fixture_id):
     return r.json().get("response", [])
 
 def get_stats(fixture_id):
-    if stats["shots"] == 0 and stats["sot"] == 0:
-    continue
-
     url = f"{BASE_URL}/fixtures/statistics?fixture={fixture_id}"
     r = requests.get(url, headers=HEADERS)
     data = r.json().get("response", [])
 
-    stats = {"shots":0, "sot":0, "corners":0}
+    stats = {"shots": 0, "sot": 0, "corners": 0}
 
     if not data:
         return stats
@@ -69,31 +66,28 @@ def get_stats(fixture_id):
                 stats["corners"] += val
 
     return stats
-    
+
 # =========================
-# GOAL LOGIC
+# LOGIC
 # =========================
 def second_half_goals(events):
     return sum(1 for e in events if e["type"] == "Goal" and e["time"]["elapsed"] >= 46)
 
-# =========================
-# MOMENTUM ENGINE
-# =========================
 def momentum(stats, minute):
     score = 0
 
-    if stats["shots"] >= 8: score += 10
-    if stats["sot"] >= 3: score += 15
-    if stats["corners"] >= 5: score += 8
+    if stats["shots"] >= 8:
+        score += 10
+    if stats["sot"] >= 3:
+        score += 15
+    if stats["corners"] >= 5:
+        score += 8
 
-    if minute >= 60:
-        if stats["sot"] >= 5: score += 10
+    if minute >= 60 and stats["sot"] >= 5:
+        score += 10
 
     return score
 
-# =========================
-# TIER SYSTEM V2
-# =========================
 def classify(score):
     if score >= 85:
         return "🔥 ELITE"
@@ -103,13 +97,6 @@ def classify(score):
         return "⚡ MEDIUM"
 
 # =========================
-# SMART SCAN WINDOW
-# =========================
-def should_scan():
-    m = datetime.now().minute
-    return (38 <= m <= 47) or (55 <= m <= 70)
-
-# =========================
 # MAIN LOOP
 # =========================
 def run():
@@ -117,14 +104,14 @@ def run():
 
     while True:
         try:
-            # TEMP: ALWAYS SCAN (TEST MODE)
             print("🧪 TEST MODE - scanning always")
 
             matches = get_live_matches()
             print(f"Found {len(matches)} matches")
+
             candidates = []
-            
-            for m in matches[:15]:  # LIMIT = API SAFETY
+
+            for m in matches[:15]:
                 try:
                     fixture = m["fixture"]
                     teams = m["teams"]
@@ -136,6 +123,7 @@ def run():
                     if not minute:
                         continue
 
+                    # prevent duplicates (already sent)
                     if match_id in seen_matches:
                         continue
 
@@ -153,19 +141,10 @@ def run():
                     # =========================
                     # FILTER
                     # =========================
-                    # =========================
-                    # FILTER (SMART VERSION)
-                    # =========================
-                    if minute < 35:
+                    if minute < 35 or minute > 75:
                         continue
-                    
-                    if minute > 75:
-                        continue
-                    
-                    if total > 3:
-                        continue
-                    
-                    if diff > 2:
+
+                    if total > 3 or diff > 2:
                         continue
 
                     # =========================
@@ -174,7 +153,7 @@ def run():
                     if minute >= 55:
                         events = get_events(match_id)
                         sh_goals = second_half_goals(events)
-                
+
                         if sh_goals > 1:
                             continue
 
@@ -183,7 +162,11 @@ def run():
                     # =========================
                     stats = get_stats(match_id)
                     print("STATS:", stats)
-                    
+
+                    # ❌ skip fake/no-data matches
+                    if stats["shots"] == 0 and stats["sot"] == 0:
+                        continue
+
                     # =========================
                     # SCORING
                     # =========================
@@ -200,19 +183,18 @@ def run():
                     boost = momentum(stats, minute)
                     final_score = base + boost
 
-                    # 🔥 DYNAMIC THRESHOLD
+                    # =========================
+                    # DYNAMIC THRESHOLD
+                    # =========================
                     if minute < 55:
                         if final_score < 55:
                             continue
                     else:
                         if final_score < 65:
                             continue
-                            
+
                     tier = classify(final_score)
 
-                    if match_id in seen_matches:
-                        continue
-                        
                     candidates.append({
                         "match_id": match_id,
                         "home": home,
@@ -223,35 +205,38 @@ def run():
                         "final_score": final_score,
                         "tier": tier
                     })
-   
+
                 except Exception as e:
                     print("Match error:", e)
+
             # =========================
-            # SEND TOP 5 SIGNALS ONLY
+            # SEND TOP 3 SIGNALS
             # =========================
             top = sorted(candidates, key=lambda x: x["final_score"], reverse=True)[:3]
-            
+
             for game in top:
                 if game["match_id"] in seen_matches:
                     continue
-            
+
                 msg = f"""{game['tier']} TOP SIGNAL
-                
-                {game['home']} vs {game['away']}
-                Min: {game['minute']}'
-                Score: {game['score']}
-                
-                Shots: {game['stats']['shots']}
-                SOT: {game['stats']['sot']}
-                Corners: {game['stats']['corners']}
-                
-                Model Score: {game['final_score']}
-                
-                ➡️ Over 1.5 2nd half
-                """
-            
+
+{game['home']} vs {game['away']}
+Min: {game['minute']}'
+Score: {game['score']}
+
+Shots: {game['stats']['shots']}
+SOT: {game['stats']['sot']}
+Corners: {game['stats']['corners']}
+
+Model Score: {game['final_score']}
+
+➡️ Over 1.5 2nd half
+"""
+
                 send_telegram(msg)
-                seen_matches.add(game["match_id"])
+
+                # mark as sent (store timestamp)
+                seen_matches[game["match_id"]] = datetime.now()
 
             time.sleep(180)
 
