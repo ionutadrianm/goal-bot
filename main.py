@@ -30,31 +30,27 @@ def send_telegram(msg):
 # GET MATCHES
 # =========================
 def get_live_matches():
-    url = f"{BASE_URL}/matches/v1/list"
-    params = {"sportId": 1}
+    url = "https://flashscore4.p.rapidapi.com/matches/v1/list-live"
 
-    r = requests.get(url, headers=HEADERS, params=params)
+    r = requests.get(url, headers=HEADERS)
 
     print("STATUS:", r.status_code)
-    print("RAW:", r.text[:500])
-    
-    data = r.json()
-    print("KEYS:", data.keys())
+    print("RAW:", r.text[:300])
 
-    events = data.get("events", [])
-    print("EVENT COUNT:", len(events))
+    try:
+        data = r.json()
 
-    # filter only LIVE matches manually
-    live_matches = []
+        # ⚠️ correct key is NOT always "events"
+        events = data.get("data", {}).get("events", [])
 
-    for e in events:
-        if e.get("status", {}).get("type") == "live":
-            live_matches.append(e)
+        print("EVENT COUNT:", len(events))
 
-    print("LIVE FILTERED:", len(live_matches))
+        return events
 
-    return live_matches
-
+    except Exception as e:
+        print("ERROR:", e)
+        return []
+        
 # =========================
 # GET MATCH DETAIL
 # =========================
