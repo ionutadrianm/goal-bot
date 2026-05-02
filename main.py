@@ -2,6 +2,7 @@ import requests
 import time
 import os
 from datetime import datetime
+import json
 
 # =========================
 # CONFIG
@@ -69,6 +70,14 @@ def get_stats(fixture_id):
 
     return stats
 
+def save_result_to_file(data):
+    line = json.dumps(data)
+    
+    print("📦 RESULT:", line)   # 👈 THIS IS KEY
+    
+    with open("results.json", "a") as f:
+        f.write(line + "\n")
+        
 # =========================
 # LOGIC
 # =========================
@@ -78,17 +87,30 @@ def second_half_goals(events):
 def momentum(stats, minute):
     score = 0
 
+    components = {
+        "shots_boost": 0,
+        "sot_boost": 0,
+        "corners_boost": 0,
+        "late_sot_boost": 0
+    }
+
     if stats["shots"] >= 8:
         score += 10
+        components["shots_boost"] = 10
+
     if stats["sot"] >= 3:
         score += 15
+        components["sot_boost"] = 15
+
     if stats["corners"] >= 5:
         score += 8
+        components["corners_boost"] = 8
 
     if minute >= 60 and stats["sot"] >= 5:
         score += 10
+        components["late_sot_boost"] = 10
 
-    return score
+    return score, components
 
 def classify(score):
     if score >= 85:
@@ -132,7 +154,19 @@ def check_finished_matches():
             else:
                 result = "❌ LOSS"
 
+            save_result_to_file({
+                "match_id": match_id,
+                "result": result,
+                "initial_score": data["initial_score"],
+                "final_score": f"{final_home}-{final_away}",
+                "model_score": data["model_score"],
+                "stats": data["stats"],
+                "base_components": data["base_components"],
+                "momentum_components": data["momentum_components"]
+            })
+        
             print(f"{result} → Match {match_id}")
+            print("📦 RESULT:", line)    
 
             send_telegram(f"""
 📊 RESULT UPDATE
@@ -237,21 +271,26 @@ def run():
                     # SCORING
                     # =========================
                     base = 50
-
-                    if total == 0:
-                        base += 20
-                    elif total == 1:
-                        base += 10
-
-                    if diff == 0:
-                        base += 15
-
+                    
+                    # base conditions
+                    zero_goal_bonus = 20 if total == 0 else 0
+                    one_goal_bonus = 10 if total == 1 else 0
+                    draw_bonus = 15 if diff == 0 else 0
+                    second_half_boost = 10 if (minute >= 50 and stats["shots"] >= 6) else 0
+                    
+                    # apply to base
+                    base += zero_goal_bonus
+                    base += one_goal_bonus
+                    base += draw_bonus
+                    base += second_half_boost
+                    
                     # 🔥 2ND HALF GOAL SETUP BOOST
                     if minute >= 50:
                         if stats["shots"] >= 6:
                             base += 10
         
-                    final_score = base + momentum(stats, minute)
+                    momentum_score, momentum_components = momentum(stats, minute)
+                    final_score = base + momentum_score
 
                     # =========================
                     # DYNAMIC THRESHOLD
@@ -273,6 +312,8 @@ def run():
                         "stats": stats,
                         "final_score": final_score,
                         "tier": classify(final_score)
+                        "base_components": base_components,
+                        "momentum_components": momentum_components
                     })
 
                 except Exception as e:
@@ -308,7 +349,10 @@ Model Score: {game['final_score']}
                     "time": datetime.now(),
                     "minute": game["minute"],
                     "initial_score": game["score"],
-                    "stats": game["stats"]
+                    "stats": game["stats"],
+                    "model_score": game["final_score"],
+                    "base_components": game["base_components"],
+                    "momentum_components": game["momentum_components"]
                 }
             current_time = time.time()
 
