@@ -72,8 +72,8 @@ def second_half_goals(events):
 def momentum(stats, minute):
     score = 0
 
-    if stats["shots"] >= 10: score += 10
-    if stats["sot"] >= 4: score += 15
+    if stats["shots"] >= 8: score += 10
+    if stats["sot"] >= 3: score += 15
     if stats["corners"] >= 5: score += 8
 
     if minute >= 60:
@@ -189,8 +189,13 @@ def run():
                     boost = momentum(stats, minute)
                     final_score = base + boost
 
-                    if final_score < 65:
-                        continue
+                    # 🔥 DYNAMIC THRESHOLD
+                    if minute < 55:
+                        if final_score < 55:
+                            continue
+                    else:
+                        if final_score < 65:
+                            continue
                             
                     tier = classify(final_score)
 
