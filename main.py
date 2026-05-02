@@ -164,8 +164,12 @@ def run():
                     print("STATS:", stats)
 
                     # ❌ skip fake/no-data matches
-                    if stats["shots"] == 0 and stats["sot"] == 0:
+                    # 🔥 DATA AVAILABILITY FILTER
+                    if stats["shots"] == 0 and stats["sot"] == 0 and stats["corners"] == 0:
                         continue
+                    if stats["shots"] < 4 and stats["corners"] < 2:
+                        continue
+                    print(f"FILTER CHECK → shots:{stats['shots']} corners:{stats['corners']}")
 
                     # =========================
                     # SCORING
