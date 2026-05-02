@@ -139,10 +139,10 @@ def run():
                     # =========================
                     # FILTER (TIME FIRST)
                     # =========================
-                    if minute < 25 or minute > 80:
+                    if minute < 35 or minute > 60:
                         continue
 
-                    # if stats["shots"] < 2 and stats["corners"] < 1:
+                    # if stats["shots"] < 7 and stats["corners"] < 4:
                     #    continue
 
                     # =========================
@@ -218,7 +218,7 @@ def run():
             # =========================
             # SEND TOP 3
             # =========================
-            top = sorted(candidates, key=lambda x: x["final_score"], reverse=True)[:3]
+            top = sorted(candidates, key=lambda x: x["final_score"], reverse=True)[:5]
 
             for game in top:
                 if game["match_id"] in seen_matches:
@@ -226,20 +226,19 @@ def run():
 
                 msg = f"""{game['tier']} TOP SIGNAL
 
-                {game['home']} vs {game['away']}
-                Min: {game['minute']}'
-                Score: {game['score']}
+{game['home']} vs {game['away']}
+Min: {game['minute']}'
+Score: {game['score']}
+Shots: {game['stats']['shots']}
+SOT: {game['stats']['sot']}
+Corners: {game['stats']['corners']}
                 
-                Shots: {game['stats']['shots']}
-                SOT: {game['stats']['sot']}
-                Corners: {game['stats']['corners']}
+Model Score: {game['final_score']}
                 
-                Model Score: {game['final_score']}
-                
-                ➡️ Over 1.5 2nd half
+➡️ Over 1.5 2nd half
                 """
 
-                send_telegram(msg)
+send_telegram(msg)
                 seen_matches[game["match_id"]] = datetime.now()
 
             time.sleep(180)
