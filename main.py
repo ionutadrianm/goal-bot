@@ -140,10 +140,9 @@ def check_finished_matches():
             goals = res[0]["goals"]
 
             status = fixture["status"]["short"]
-
-            print(f"⏱ Status: {status}")
             
             if status not in ["FT", "AET", "PEN"]:
+                print(f"⏱ Status: {status}")
                 continue
 
             final_home = goals["home"] or 0
