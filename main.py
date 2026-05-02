@@ -167,7 +167,7 @@ def run():
             
             candidates = []
 
-            for m in matches[:15]:
+            for m in matches[:50]:
                 try:
                     fixture = m["fixture"]
                     teams = m["teams"]
@@ -190,7 +190,10 @@ def run():
 
                     total = home_goals + away_goals
                     diff = abs(home_goals - away_goals)
-
+                    # ❌ skip dead games (no comeback potential)
+                    if total >= 3 and diff >= 2:
+                        continue
+    
                     # =========================
                     # FILTER (TIME FIRST)
                     # =========================
@@ -223,7 +226,7 @@ def run():
                         continue
 
                     # ❌ weak activity
-                    if stats["shots"] < 3 and stats["corners"] < 1:
+                    if stats["shots"] < 2 and stats["corners"] < 1:
                         continue
 
                     print(f"{home} vs {away} | {minute}' | {home_goals}-{away_goals} | {stats}")
@@ -241,6 +244,11 @@ def run():
                     if diff == 0:
                         base += 15
 
+                    # 🔥 2ND HALF GOAL SETUP BOOST
+                    if minute >= 50:
+                        if stats["shots"] >= 6:
+                            base += 10
+        
                     final_score = base + momentum(stats, minute)
 
                     # =========================
@@ -249,9 +257,9 @@ def run():
                     if minute < 55:
                         if final_score < 45:
                             continue
-                    # else:
-                    #    if final_score < 65:
-                    #        continue
+                    else:
+                        if final_score < 65:
+                            continue
                             
                     print(f"✅ PASS → {home} vs {away} | min:{minute} | score:{final_score}")
                     candidates.append({
