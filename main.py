@@ -127,7 +127,6 @@ def check_finished_matches():
     print("📊 Checking finished matches...")
 
     for match_id, data in list(seen_matches.items()):
-        print(f"🔍 Checking match: {match_id}")
         try:
             url = f"{BASE_URL}/fixtures?id={match_id}"
             r = requests.get(url, headers=HEADERS)
@@ -142,7 +141,6 @@ def check_finished_matches():
             status = fixture["status"]["short"]
             
             if status not in ["FT", "AET", "PEN"]:
-                print(f"⏱ Status: {status}")
                 continue
 
             final_home = goals["home"] or 0
@@ -360,23 +358,8 @@ Model Score: {game['final_score']}
                     "momentum_components": game["momentum_components"]
                 }
 
-            # 🧪 TEST RESULT INJECTION (TEMPORARY)
-            if not seen_matches:
-                seen_matches[999999] = {
-                    "initial_score": "0-0",
-                    "model_score": 80,
-                    "stats": {"shots": 10, "sot": 5, "corners": 4},
-                    "goals_at_signal": 0,
-                    "base_components": {},
-                    "momentum_components": {}
-                }
-                print("🧪 Injected test match")
-                
-            current_time = time.time()
-
             # ⏱ Run result check every 60 minutes
-            # if seen_matches and current_time - last_result_check > 3600:
-            if seen_matches:
+            if seen_matches and current_time - last_result_check > 3600:
                 check_finished_matches()
                 last_result_check = current_time
                 
