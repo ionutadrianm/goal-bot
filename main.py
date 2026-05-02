@@ -107,10 +107,8 @@ def run():
 
     while True:
         try:
-            if not should_scan():
-                print("⏸ Outside scan window")
-                time.sleep(60)
-                continue
+            # TEMP: ALWAYS SCAN (TEST MODE)
+            print("🧪 TEST MODE - scanning always")
 
             print("⏱ SCAN WINDOW ACTIVE")
 
