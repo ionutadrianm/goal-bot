@@ -366,9 +366,12 @@ Model Score: {game['final_score']}
                 }
 
             # ⏱ Run result check every 60 minutes
-            if seen_matches and current_time - last_result_check > 3600:
+            # ⏱ Run result check every 60 minutes
+            current_time = time.time()
+            
+            if seen_matches and current_time - last_result_check > 1800:
+                print("🕒 Running result check (30 min interval)")
                 check_finished_matches()
-                print(f"Checking API response for match {match_id}: {res}")
                 last_result_check = current_time
                 
             time.sleep(300)
