@@ -141,12 +141,15 @@ def run():
                     # =========================
                     # FILTER
                     # =========================
-                    if minute < 35 or minute > 75:
+                    if minute < 30 or minute > 75:
                         continue
 
                     if total > 3 or diff > 2:
                         continue
 
+                    if minute < 30 and total == 0:
+                            continue
+                        
                     # =========================
                     # EVENTS
                     # =========================
@@ -165,11 +168,16 @@ def run():
 
                     # ❌ skip fake/no-data matches
                     # 🔥 DATA AVAILABILITY FILTER
+                    stats = get_stats(match_id)
+                    print("STATS:", stats)
+                    
+                    # ❌ No data at all → skip
                     if stats["shots"] == 0 and stats["sot"] == 0 and stats["corners"] == 0:
                         continue
-                    if stats["shots"] < 4 and stats["corners"] < 2:
+                    
+                    # ❌ Very low activity → skip (tuneable)
+                    if stats["shots"] < 3 and stats["corners"] < 1:
                         continue
-                    print(f"FILTER CHECK → shots:{stats['shots']} corners:{stats['corners']}")
 
                     # =========================
                     # SCORING
