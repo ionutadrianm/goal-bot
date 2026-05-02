@@ -18,6 +18,7 @@ HEADERS = {
 }
 
 # store match_id -> timestamp
+sent_matches = set()
 seen_matches = {}
 last_result_check = 0
 
@@ -130,7 +131,7 @@ def check_finished_matches():
         # ⏱ Only check matches older than 60 minutes
         time_since_signal = (datetime.now() - data["time"]).total_seconds()
         
-        if time_since_signal < 5400:
+        if time_since_signal < 3000:
             print(f"⏳ Too early to check match {match_id} ({int(time_since_signal/60)} min)")
             continue
     
@@ -204,8 +205,13 @@ def run():
     
     while True:
         try:
-            print("🧪 TEST MODE - scanning always")
-
+            current_time = time.time()
+            
+            if seen_matches and current_time - last_result_check > 1800:
+                print("🕒 Running result check (30 min interval)")
+                check_finished_matches()
+                last_result_check = current_time
+                
             matches = get_live_matches()
             print(f"Found {len(matches)} matches")
             
@@ -223,7 +229,7 @@ def run():
                     if not minute:
                         continue
 
-                    if match_id in seen_matches:
+                    if match_id in sent_matches:
                         continue
 
                     home = teams["home"]["name"]
@@ -356,6 +362,7 @@ Model Score: {game['final_score']}
                 """
 
                 send_telegram(msg)
+                sent_matches.add(game["match_id"])
                 seen_matches[game["match_id"]] = {
                     "time": datetime.now(),
                     "minute": game["minute"],
@@ -369,13 +376,7 @@ Model Score: {game['final_score']}
 
             # ⏱ Run result check every 60 minutes
             # ⏱ Run result check every 60 minutes
-            current_time = time.time()
-            
-            if seen_matches and current_time - last_result_check > 1800:
-                print("🕒 Running result check (30 min interval)")
-                check_finished_matches()
-                last_result_check = current_time
-                
+              
             time.sleep(300)
 
         except Exception as e:
