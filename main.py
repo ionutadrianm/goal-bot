@@ -108,7 +108,7 @@ def run():
 
             matches = get_live_matches()
             print(f"Found {len(matches)} matches")
-
+            
             candidates = []
 
             for m in matches[:15]:
@@ -141,8 +141,8 @@ def run():
                     if minute < 25 or minute > 80:
                         continue
 
-                    if stats["shots"] < 2 and stats["corners"] < 1:
-                        continue
+                    # if stats["shots"] < 2 and stats["corners"] < 1:
+                    #    continue
 
                     # =========================
                     # EVENTS
@@ -192,7 +192,8 @@ def run():
                     else:
                         if final_score < 65:
                             continue
-
+                            
+                    print(f"✅ PASS → {home} vs {away} | min:{minute} | score:{final_score}")
                     candidates.append({
                         "match_id": match_id,
                         "home": home,
