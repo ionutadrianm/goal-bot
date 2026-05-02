@@ -238,7 +238,7 @@ Model Score: {game['final_score']}
 ➡️ Over 1.5 2nd half
                 """
 
-send_telegram(msg)
+            send_telegram(msg)
                 seen_matches[game["match_id"]] = datetime.now()
 
             time.sleep(180)
