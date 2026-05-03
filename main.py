@@ -225,8 +225,14 @@ def run():
                         continue
 
                     stats = get_stats(match_id)
-                    if not stats:
+
+                    # ❌ no stats available at all
+                    if stats is None:
+                        print(f"❌ NO STATS → {home} vs {away}")
                         continue
+                    
+                    # 🔍 DEBUG SNAPSHOT (KEY LINE)
+                    print(f"CHECK → {home} vs {away} | min:{minute} | shots:{stats['shots']} sot:{stats['sot']} corners:{stats['corners']}")
 
                     print(f"DEBUG → {home} vs {away} | min:{minute} | stats:{stats}")
 
@@ -235,11 +241,15 @@ def run():
                     # =========================
                     if 35 <= minute <= 45:
 
-                        if match_id in tracked_matches:
-                            continue
-
-                        if stats["sot"] < 2:
-                            continue
+                    print(f"🟡 TRACK CHECK → {home} | min:{minute} | shots:{stats['shots']} sot:{stats['sot']}")
+                
+                    if match_id in tracked_matches:
+                        print(f"❌ ALREADY TRACKED → {home}")
+                        continue
+                
+                    if stats["sot"] < 2:
+                        print(f"❌ TRACK FAIL (LOW SOT) → {home} | sot:{stats['sot']}")
+                        continue
 
                         tracked_matches[match_id] = {
                             "teams": f"{home} vs {away}",
@@ -253,22 +263,28 @@ def run():
                     # =========================
                     # PHASE 2 — CONFIRM
                     # =========================
-                    if 55 <= minute <= 65:
+                    if 50 <= minute <= 65:
 
-                        if match_id not in tracked_matches:
-                            continue
-
-                        if match_id in seen_matches:
-                            continue
+                    print(f"🔵 CONFIRM CHECK → {home} | min:{minute} | shots:{stats['shots']} sot:{stats['sot']}")
+                
+                    if match_id not in tracked_matches:
+                        print(f"❌ NOT TRACKED BEFORE → {home}")
+                        continue
+                
+                    if match_id in seen_matches:
+                        print(f"❌ ALREADY SENT → {home}")
+                        continue
 
                         first = tracked_matches[match_id]
                         first_stats = first["first_stats"]
 
                         # momentum check
                         if stats["shots"] <= first_stats["shots"]:
+                            print(f"❌ NO MOMENTUM → {home} | {stats['shots']} <= {first_stats['shots']}")
                             continue
 
                         if stats["sot"] < 3:
+                            print(f"❌ CONFIRM FAIL (LOW SOT) → {home} | sot:{stats['sot']}")
                             continue
 
                         score = 50
