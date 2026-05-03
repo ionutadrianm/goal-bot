@@ -261,7 +261,7 @@ def generate_performance_report():
                     if r["result"] == "✅ WIN":
                         wins += 1
 
-                    tier = r.get("signal_tier", "⚡ MEDIUM")
+                    tier = r.get("signal_tier", "⚡ UNKNOWN")
 
                     if tier not in tiers:
                         tiers[tier] = {"total": 0, "wins": 0}
@@ -469,14 +469,31 @@ def run():
                         if stats["sot"] < 2:
                             continue
 
-                        score = 50
-
+                        # =========================
+                        # NEW SCORING ENGINE
+                        # =========================
+                        score = 40
+                        
+                        # draw = strong factor
                         if home_goals == away_goals:
+                            score += 20
+                        
+                        # shots pressure
+                        if stats["shots"] >= 12:
                             score += 15
-                        if stats["shots"] >= 10:
+                        elif stats["shots"] >= 9:
                             score += 10
-                        if stats["sot"] >= 4:
-                            score += 15
+                        
+                        # shots on target = key signal
+                        if stats["sot"] >= 5:
+                            score += 20
+                        elif stats["sot"] >= 3:
+                            score += 10
+                        
+                        # momentum boost
+                        delta_shots = stats["shots"] - first["track_stats"]["shots"]
+                        if delta_shots >= 4:
+                            score += 10
 
                         tier = classify(score)
 
