@@ -617,8 +617,11 @@ def run():
                         value = calculate_value(book_odds, fair_odds) if book_odds else None
 
                         if value is None or value < 5:
-                            logging.info(f"⛔ SKIPPED LOW VALUE → {home} vs {away} | value={value}")
-                            continue
+                        logging.info(
+                            f"⛔ SKIPPED → {home} vs {away} | "
+                            f"book:{book_odds} fair:{fair_odds} prob:{round(prob*100)}% value:{value}"
+                        )
+                        continue
 
                         send_telegram(f"""{tier} VALUE SIGNAL
 
