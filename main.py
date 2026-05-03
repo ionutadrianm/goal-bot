@@ -8,6 +8,7 @@ from datetime import datetime
 import json
 import logging
 from logging.handlers import RotatingFileHandler
+import csv
 
 # =========================
 # LOGGING
@@ -47,6 +48,7 @@ last_result_check = 0
 
 SIGNALS_FILE = "signals.json"
 TRACKED_FILE = "tracked.json"
+RESULTS_CSV = "results.csv"
 
 # =========================
 # PERSISTENCE
@@ -163,6 +165,73 @@ def save_result_to_file(data):
     except Exception as e:
         logging.error(f"Save error: {e}")
 
+def save_result_to_csv(data):
+    try:
+        file_exists = os.path.isfile(RESULTS_CSV)
+
+        with open(RESULTS_CSV, "a", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=[
+                "match",
+                "result",
+                "signal_tier",
+                "model_score",
+
+                "track_score",
+                "signal_score",
+                "final_score",
+
+                "track_minute",
+                "signal_minute",
+
+                "track_shots",
+                "track_sot",
+                "track_corners",
+
+                "signal_shots",
+                "signal_sot",
+                "signal_corners",
+
+                "delta_shots",
+                "delta_sot",
+                "delta_corners",
+
+                "goals_at_signal"
+            ])
+
+            if not file_exists:
+                writer.writeheader()
+
+            writer.writerow({
+                "match": data.get("match"),
+                "result": data.get("result"),
+                "signal_tier": data.get("signal_tier"),
+                "model_score": data.get("model_score"),
+
+                "track_score": data.get("track_score"),
+                "signal_score": data.get("signal_score"),
+                "final_score": data.get("final_score"),
+
+                "track_minute": data.get("track_minute"),
+                "signal_minute": data.get("signal_minute"),
+
+                "track_shots": data.get("track_stats", {}).get("shots"),
+                "track_sot": data.get("track_stats", {}).get("sot"),
+                "track_corners": data.get("track_stats", {}).get("corners"),
+
+                "signal_shots": data.get("signal_stats", {}).get("shots"),
+                "signal_sot": data.get("signal_stats", {}).get("sot"),
+                "signal_corners": data.get("signal_stats", {}).get("corners"),
+
+                "delta_shots": data.get("delta", {}).get("shots"),
+                "delta_sot": data.get("delta", {}).get("sot"),
+                "delta_corners": data.get("delta", {}).get("corners"),
+
+                "goals_at_signal": data.get("goals_at_signal")
+            })
+
+    except Exception as e:
+        logging.error(f"CSV save error: {e}")
+        
 # =========================
 # RESULT CHECKER
 # =========================
@@ -197,31 +266,29 @@ def check_finished_matches():
 
             result = "✅ WIN" if final_total >= initial_total + 2 else "❌ LOSS"
 
-            save_result_to_file({
+            result_data = {
                 "match": data["teams"],
                 "result": result,
             
-                # 🔥 SCORES
-                "track_score": data.get("track_score", data.get("initial_score", "N/A")),
-                "signal_score": data.get("signal_score", data.get("initial_score", "N/A")),
+                "track_score": data.get("track_score", data.get("initial_score")),
+                "signal_score": data.get("signal_score", data.get("initial_score")),
                 "final_score": f"{final_home}-{final_away}",
             
-                # 🔥 TIMING
-                "track_minute": data["track_minute"],
-                "signal_minute": data["signal_minute"],
+                "track_minute": data.get("track_minute"),
+                "signal_minute": data.get("signal_minute"),
             
-                # 🔥 STATS
-                "track_stats": data["track_stats"],
-                "signal_stats": data["signal_stats"],
-                "delta": data["delta"],
+                "track_stats": data.get("track_stats"),
+                "signal_stats": data.get("signal_stats"),
+                "delta": data.get("delta"),
             
-                # 🔥 MODEL
-                "model_score": data["model_score"],
+                "model_score": data.get("model_score"),
                 "signal_tier": data.get("signal_tier", "UNKNOWN"),
             
-                # 🔥 EXTRA
-                "goals_at_signal": data["goals_at_signal"]
-            })
+                "goals_at_signal": data.get("goals_at_signal")
+            }
+            
+            save_result_to_file(result_data)
+            save_result_to_csv(result_data)
 
             logging.info(f"✅ RESULT → {data['teams']} | {result} | {final_home}-{final_away}")
 
