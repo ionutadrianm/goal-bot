@@ -46,6 +46,7 @@ tracked_matches = {}
 last_result_check = 0
 
 SIGNALS_FILE = "signals.json"
+TRACKED_FILE = "tracked.json"
 
 # =========================
 # PERSISTENCE
@@ -71,6 +72,23 @@ def load_signals():
                 logging.info(f"📂 Loaded {len(seen_matches)} active signals")
     except Exception as e:
         logging.error(f"Load signals error: {e}")
+
+def save_tracked():
+    try:
+        with open(TRACKED_FILE, "w") as f:
+            json.dump(tracked_matches, f, default=str)
+    except Exception as e:
+        logging.error(f"Save tracked error: {e}")
+
+def load_tracked():
+    global tracked_matches
+    try:
+        if os.path.exists(TRACKED_FILE):
+            with open(TRACKED_FILE, "r") as f:
+                tracked_matches = json.load(f)
+                logging.info(f"📂 Loaded {len(tracked_matches)} tracked matches")
+    except Exception as e:
+        logging.error(f"Load tracked error: {e}")
 
 # =========================
 # TELEGRAM
@@ -284,7 +302,7 @@ def run():
                                     "track_stats": stats,
                                     "score": f"{home_goals}-{away_goals}"
                                 }
-
+                                save_tracked()
                                 logging.info(f"🧠 TRACKED → {home} vs {away} | min:{minute}")
 
                     # CONFIRM
@@ -360,7 +378,8 @@ Corners: {stats['corners']}
                             # 🔥 EXTRA
                             "goals_at_signal": total
                         }
-
+                        del tracked_matches[match_id]
+                        save_tracked()
                         save_signals()
 
                         logging.info(f"🚀 SIGNAL → {home} vs {away} | min:{minute}")
@@ -373,6 +392,17 @@ Corners: {stats['corners']}
             if seen_matches and current_time - last_result_check > 1800:
                 check_finished_matches()
                 last_result_check = current_time
+
+            # =========================
+            # CLEANUP OLD TRACKED MATCHES
+            # =========================
+            active_ids = [m["fixture"]["id"] for m in matches]
+            
+            for mid in list(tracked_matches.keys()):
+                if mid not in active_ids:
+                    del tracked_matches[mid]
+            
+            save_tracked()
 
             save_signals()
 
@@ -387,4 +417,5 @@ Corners: {stats['corners']}
 # =========================
 if __name__ == "__main__":
     load_signals()
+    load_tracked()   # ✅ ADD THIS
     run()
