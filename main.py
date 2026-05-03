@@ -6,14 +6,14 @@ import json
 from dotenv import load_dotenv
 load_dotenv()
 
-print("🔑 API KEY LOADED:", API_KEY[:6] if API_KEY else "NONE")
-
 # =========================
 # CONFIG
 # =========================
 API_KEY = os.getenv("API_FOOTBALL_KEY")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
+
+print("🔑 API KEY LOADED:", API_KEY[:6] if API_KEY else "NONE")
 
 BASE_URL = "https://v3.football.api-sports.io"
 
@@ -353,6 +353,8 @@ Corners: {stats['corners']}
 if __name__ == "__main__":
     while True:
         try:
+            print("📡 CALLING API...")
+            matches = get_live_matches()
             run()
         except Exception as e:
             print("🔥 Restarting after error:", e)
