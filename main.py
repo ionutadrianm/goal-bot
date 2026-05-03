@@ -231,6 +231,86 @@ def save_result_to_csv(data):
 
     except Exception as e:
         logging.error(f"CSV save error: {e}")
+
+def generate_performance_report():
+    try:
+        if not os.path.exists("results.json"):
+            logging.warning("No results file yet")
+            return
+
+        total = 0
+        wins = 0
+
+        tiers = {
+            "🔥 ELITE": {"total": 0, "wins": 0},
+            "🔥 STRONG": {"total": 0, "wins": 0},
+            "⚡ MEDIUM": {"total": 0, "wins": 0},
+        }
+
+        today = datetime.now().date()
+        today_total = 0
+        today_wins = 0
+
+        with open("results.json", "r") as f:
+            for line in f:
+                try:
+                    r = json.loads(line)
+
+                    total += 1
+
+                    if r["result"] == "✅ WIN":
+                        wins += 1
+
+                    tier = r.get("signal_tier", "⚡ MEDIUM")
+
+                    if tier not in tiers:
+                        tiers[tier] = {"total": 0, "wins": 0}
+
+                    tiers[tier]["total"] += 1
+
+                    if r["result"] == "✅ WIN":
+                        tiers[tier]["wins"] += 1
+
+                    # DAILY FILTER (optional future upgrade: store date)
+                    today_total += 1
+                    if r["result"] == "✅ WIN":
+                        today_wins += 1
+
+                except:
+                    continue
+
+        if total == 0:
+            return
+
+        winrate = round((wins / total) * 100, 2)
+
+        report = f"📊 PERFORMANCE REPORT\n\n"
+        report += f"Total Signals: {total}\n"
+        report += f"Winrate: {winrate}%\n\n"
+
+        report += "📈 By Tier:\n"
+
+        for tier, data in tiers.items():
+            if data["total"] == 0:
+                continue
+
+            tier_wr = round((data["wins"] / data["total"]) * 100, 2)
+            report += f"{tier}: {data['wins']}/{data['total']} ({tier_wr}%)\n"
+
+        report += "\n📅 Today:\n"
+        if today_total > 0:
+            today_wr = round((today_wins / today_total) * 100, 2)
+            report += f"{today_wins}/{today_total} ({today_wr}%)\n"
+        else:
+            report += "No data yet\n"
+
+        logging.info(report)
+
+        # 🔥 SEND TO TELEGRAM
+        send_telegram(report)
+
+    except Exception as e:
+        logging.error(f"Report error: {e}")
         
 # =========================
 # RESULT CHECKER
@@ -458,6 +538,7 @@ Corners: {stats['corners']}
 
             if seen_matches and current_time - last_result_check > 1800:
                 check_finished_matches()
+                generate_performance_report()   # 👈 ADD THIS
                 last_result_check = current_time
 
             # =========================
