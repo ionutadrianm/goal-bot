@@ -180,7 +180,9 @@ def check_finished_matches():
             send_telegram(f"""
 📊 RESULT UPDATE
 
-Match ID: {match_id}
+{data['home']} vs {data['away']}1
+Goals at signal: {data['goals_at_signal']}
+Model Score: {data['model_score']}
 Result: {result}
 
 Start Score: {data['initial_score']}
@@ -371,7 +373,11 @@ Model Score: {game['final_score']}
                     "model_score": game["final_score"],
                     "goals_at_signal": game["goals_at_signal"],
                     "base_components": game["base_components"],
-                    "momentum_components": game["momentum_components"]
+                    "momentum_components": game["momentum_components"],
+                
+                    # ✅ ADD THIS
+                    "home": game["home"],
+                    "away": game["away"]
                 }
 
             # ⏱ Run result check every 60 minutes
