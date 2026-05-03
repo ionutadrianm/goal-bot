@@ -321,8 +321,12 @@ Corners: {stats['corners']}
                 
             print("✅ LOOP COMPLETED")
             print("⏳ Sleeping 5 min before next scan...")
-            time.sleep(300)
-            continue
+            
+            print("⏳ Keeping alive...")
+
+            for i in range(300):
+                print(f"tick {i}")
+                time.sleep(1)
 
         except Exception as e:
             print("❌ LOOP ERROR:", e)
