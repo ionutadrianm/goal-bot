@@ -92,7 +92,7 @@ def classify(score):
         return "⚡ MEDIUM"
 
 # =========================
-# RESULTS
+# SAVE RESULTS
 # =========================
 def save_result_to_file(data):
     try:
@@ -101,6 +101,9 @@ def save_result_to_file(data):
     except Exception as e:
         print("Save error:", e)
 
+# =========================
+# RESULT CHECKER
+# =========================
 def check_finished_matches():
     print("📊 Checking results...")
 
@@ -131,12 +134,25 @@ def check_finished_matches():
 
             result = "✅ WIN" if final_total >= initial_total + 2 else "❌ LOSS"
 
+            # 🔥 SAVE FULL DATASET
             save_result_to_file({
                 "match": data["teams"],
                 "result": result,
+
                 "initial_score": data["initial_score"],
                 "final_score": f"{final_home}-{final_away}",
-                "stats": data["stats"]
+
+                "track_minute": data["track_minute"],
+                "signal_minute": data["signal_minute"],
+
+                "track_stats": data["track_stats"],
+                "signal_stats": data["signal_stats"],
+
+                "delta": data["delta"],
+
+                "goals_at_signal": data["goals_at_signal"],
+
+                "model_score": data["model_score"]
             })
 
             send_telegram(f"""
@@ -187,7 +203,6 @@ def run():
                     if not minute:
                         continue
 
-                    # ⛔ TIME FILTER
                     if minute < 30 or minute > 70:
                         continue
 
@@ -198,7 +213,7 @@ def run():
                     away_goals = goals["away"] or 0
                     total = home_goals + away_goals
 
-                    # ⛔ DEAD GAME
+                    # 🔥 DEAD GAME FILTER
                     if total >= 3:
                         continue
 
@@ -207,7 +222,7 @@ def run():
                         continue
 
                     # =========================
-                    # TRACK
+                    # TRACK PHASE
                     # =========================
                     if 30 <= minute <= 50:
 
@@ -216,14 +231,15 @@ def run():
                             if stats["shots"] >= 5:
                                 tracked_matches[match_id] = {
                                     "teams": f"{home} vs {away}",
-                                    "first_stats": stats,
+                                    "track_minute": minute,
+                                    "track_stats": stats,
                                     "score": f"{home_goals}-{away_goals}"
                                 }
 
                                 print(f"🧠 TRACKED → {home}")
 
                     # =========================
-                    # CONFIRM
+                    # CONFIRM PHASE
                     # =========================
                     if 50 <= minute <= 65:
 
@@ -233,9 +249,10 @@ def run():
                         if match_id in seen_matches:
                             continue
 
-                        first_stats = tracked_matches[match_id]["first_stats"]
+                        first = tracked_matches[match_id]
 
-                        if stats["shots"] <= first_stats["shots"]:
+                        # momentum check
+                        if stats["shots"] <= first["track_stats"]["shots"]:
                             continue
 
                         if stats["sot"] < 1:
@@ -265,11 +282,27 @@ Corners: {stats['corners']}
 ➡️ Over 1.5 2nd half
 """)
 
+                        # 🔥 SAVE FULL SIGNAL DATA
                         seen_matches[match_id] = {
                             "time": datetime.now(),
                             "teams": f"{home} vs {away}",
+
                             "initial_score": f"{home_goals}-{away_goals}",
-                            "stats": stats
+                            "goals_at_signal": total,
+
+                            "track_minute": first["track_minute"],
+                            "track_stats": first["track_stats"],
+
+                            "signal_minute": minute,
+                            "signal_stats": stats,
+
+                            "delta": {
+                                "shots": stats["shots"] - first["track_stats"]["shots"],
+                                "sot": stats["sot"] - first["track_stats"]["sot"],
+                                "corners": stats["corners"] - first["track_stats"]["corners"]
+                            },
+
+                            "model_score": score
                         }
 
                         print(f"🚀 SIGNAL → {home}")
@@ -277,8 +310,11 @@ Corners: {stats['corners']}
                 except Exception as e:
                     print("Match error:", e)
 
-            # RESULTS CHECK
+            # =========================
+            # RESULT CHECK
+            # =========================
             current_time = time.time()
+
             if seen_matches and current_time - last_result_check > 1800:
                 check_finished_matches()
                 last_result_check = current_time
