@@ -7,7 +7,21 @@ import os
 from datetime import datetime
 import json
 
+import logging
+
+from logging.handlers import RotatingFileHandler
+
+handler = RotatingFileHandler("bot.log", maxBytes=5_000_000, backupCount=3)
+
+logging.basicConfig(
+    handlers=[handler],
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
 print("🔥 SCRIPT STARTED")
+
+logging.info("🔥 Bot started")
 
 # =========================
 # CONFIG
@@ -15,8 +29,6 @@ print("🔥 SCRIPT STARTED")
 API_KEY = os.getenv("API_FOOTBALL_KEY")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
-
-print("🔑 API KEY:", API_KEY[:6] if API_KEY else "NONE")
 
 BASE_URL = "https://v3.football.api-sports.io"
 
@@ -110,7 +122,7 @@ def check_finished_matches():
     for match_id, data in list(seen_matches.items()):
         try:
             time_since = (datetime.now() - data["time"]).total_seconds()
-            if time_since < 5400:
+            if time_since < 2400:
                 continue
 
             r = requests.get(f"{BASE_URL}/fixtures?id={match_id}", headers=HEADERS)
@@ -138,22 +150,20 @@ def check_finished_matches():
             save_result_to_file({
                 "match": data["teams"],
                 "result": result,
-
                 "initial_score": data["initial_score"],
                 "final_score": f"{final_home}-{final_away}",
-
                 "track_minute": data["track_minute"],
                 "signal_minute": data["signal_minute"],
-
                 "track_stats": data["track_stats"],
                 "signal_stats": data["signal_stats"],
-
                 "delta": data["delta"],
-
                 "goals_at_signal": data["goals_at_signal"],
-
                 "model_score": data["model_score"]
             })
+            
+            # ✅ ADD THESE 2 LINES HERE
+            print(f"✅ RESULT → {data['teams']} | {result} | final:{final_home}-{final_away}")
+            logging.info(f"RESULT → {data['teams']} | {result} | final:{final_home}-{final_away}")
 
             send_telegram(f"""
 📊 RESULT UPDATE
@@ -181,14 +191,18 @@ def run():
     while True:
         try:
             print("\n🔁 NEW SCAN", datetime.now())
-
+            logging.info("🔁 New scan cycle")
+            
             matches = get_live_matches()
-
+            logging.info("📡 Fetching live matches")
+            
             if not matches:
                 print("⚠️ No live matches")
                 time.sleep(60)
                 continue
-
+                
+            logging.info(f"Matches fetched: {len(matches)}")
+            
             print(f"📊 Matches: {len(matches)}")
 
             for m in matches[:80]:
@@ -236,7 +250,9 @@ def run():
                                     "score": f"{home_goals}-{away_goals}"
                                 }
 
-                                print(f"🧠 TRACKED → {home}")
+                                msg = f"TRACKED → {home} vs {away} | min:{minute} | shots:{stats['shots']} sot:{stats['sot']}"
+                                print(msg)
+                                logging.info(msg)
 
                     # =========================
                     # CONFIRM PHASE
@@ -305,10 +321,12 @@ Corners: {stats['corners']}
                             "model_score": score
                         }
 
-                        print(f"🚀 SIGNAL → {home}")
+                        msg = f"SIGNAL → {home} vs {away} | min:{minute} | score:{home_goals}-{away_goals} | shots:{stats['shots']} sot:{stats['sot']}"
+                        print(msg)
+                        logging.info(msg)
 
                 except Exception as e:
-                    print("Match error:", e)
+                    logging.error(f"Match error: {e}")
 
             # =========================
             # RESULT CHECK
@@ -318,11 +336,10 @@ Corners: {stats['corners']}
             if seen_matches and current_time - last_result_check > 1800:
                 check_finished_matches()
                 last_result_check = current_time
-
             time.sleep(300)
 
         except Exception as e:
-            print("LOOP ERROR:", e)
+            logging.error(f"LOOP ERROR: {e}")
             time.sleep(60)
 
 # =========================
