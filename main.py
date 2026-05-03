@@ -160,6 +160,15 @@ Final: {final_home}-{final_away}
         except Exception as e:
             print("Result check error:", e)
 
+import threading
+
+def heartbeat():
+    while True:
+        print(f"💓 heartbeat: {datetime.now()}")
+        time.sleep(60)
+
+threading.Thread(target=heartbeat, daemon=True).start()
+
 # =========================
 # MAIN LOOP
 # =========================
