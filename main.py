@@ -40,13 +40,16 @@ def send_telegram(msg):
 # API CALLS
 # =========================
 def get_live_matches():
+    print("📡 ENTER get_live_matches()")   # 👈 MUST PRINT
+
     try:
         url = f"{BASE_URL}/fixtures?live=all"
+        print("🌐 URL:", url)
+
         r = requests.get(url, headers=HEADERS)
 
-        print("🌐 URL:", url)
         print("📡 STATUS:", r.status_code)
-        print("📦 RAW RESPONSE:", r.text[:500])  # first 500 chars
+        print("📦 RAW RESPONSE:", r.text[:300])
 
         data = r.json()
 
@@ -198,8 +201,9 @@ def run():
         try:
             print("\n🔁 NEW SCAN CYCLE")
             print("💓 alive:", datetime.now())
-            print("📡 CALLING API...")
+            print("📡 CALLING FUNCTION get_live_matches...")
             matches = get_live_matches()
+            print("📡 RETURNED MATCHES:", len(matches))
 
             if not matches:
                 print("⚠️ No matches found")
