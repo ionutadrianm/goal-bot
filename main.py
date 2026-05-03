@@ -604,6 +604,7 @@ def run():
                         odds_data = get_odds(match_id)
                         
                         book_odds = get_target_odds(odds_data, total)
+                        logging.info(f"ODDS DEBUG → {home} vs {away} | odds_data={odds_data} | book_odds={book_odds}")
                         
                         delta = {
                             "shots": stats["shots"] - first["track_stats"]["shots"],
@@ -616,7 +617,7 @@ def run():
                         
                         value = calculate_value(book_odds, fair_odds) if book_odds else None
 
-                        if value is None or value < 5:
+                        if value is None or value < 2:
                             logging.info(
                                 f"⛔ SKIPPED → {home} vs {away} | "
                                 f"book:{book_odds} fair:{fair_odds} value:{value}"
