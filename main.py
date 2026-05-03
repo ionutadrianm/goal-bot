@@ -1,16 +1,33 @@
+print("🔥 SCRIPT STARTED")
+from dotenv import load_dotenv
+load_dotenv()
 import requests
 import time
 import os
 from datetime import datetime
 import json
-print("🔥 SCRIPT STARTED")
-from dotenv import load_dotenv
-load_dotenv()
 
 # =========================
 # CONFIG
 # =========================
 API_KEY = os.getenv("API_FOOTBALL_KEY")
+print("🔑 API KEY:", API_KEY[:6] if API_KEY else "NONE")
+
+print("\n🧪 DIRECT API TEST START")
+
+test_url = f"{BASE_URL}/fixtures?live=all"
+test_response = requests.get(test_url, headers=HEADERS)
+
+print("📡 STATUS:", test_response.status_code)
+print("📦 RESPONSE:", test_response.text[:300])
+
+try:
+    data = test_response.json()
+    print("📊 COUNT:", len(data.get("response", [])))
+except Exception as e:
+    print("❌ JSON ERROR:", e)
+
+print("🧪 DIRECT API TEST END\n")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
@@ -21,22 +38,6 @@ BASE_URL = "https://v3.football.api-sports.io"
 HEADERS = {
     "x-apisports-key": API_KEY
 }
-
-print("\n🧪 DIRECT API TEST START")
-
-test_url = f"{BASE_URL}/fixtures?live=all"
-test_response = requests.get(test_url, headers=HEADERS)
-
-print("📡 STATUS:", test_response.status_code)
-print("📦 RESPONSE:", test_response.text[:500])
-
-try:
-    data = test_response.json()
-    print("📊 COUNT:", len(data.get("response", [])))
-except Exception as e:
-    print("❌ JSON ERROR:", e)
-
-print("🧪 DIRECT API TEST END\n")
 
 seen_matches = {}
 tracked_matches = {}
@@ -205,7 +206,7 @@ def heartbeat():
         print(f"💓 heartbeat: {datetime.now()}")
         time.sleep(60)
 
-threading.Thread(target=heartbeat, daemon=True).start()
+# threading.Thread(target=heartbeat, daemon=True).start()
 
 # =========================
 # MAIN LOOP
@@ -375,7 +376,5 @@ Corners: {stats['corners']}
 # START
 # =========================
 if __name__ == "__main__":
-    try:
-        run()
-    except Exception as e:
-        print("🔥 Fatal error:", e)
+    print("🚀 STARTING MAIN")
+    run()
