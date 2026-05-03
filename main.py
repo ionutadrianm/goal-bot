@@ -8,16 +8,21 @@ from datetime import datetime
 import json
 
 import logging
-
 from logging.handlers import RotatingFileHandler
 
-handler = RotatingFileHandler("bot.log", maxBytes=5_000_000, backupCount=3)
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
-logging.basicConfig(
-    handlers=[handler],
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
-)
+file_handler = RotatingFileHandler("bot.log", maxBytes=5_000_000, backupCount=3)
+console_handler = logging.StreamHandler()
+
+formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+
+file_handler.setFormatter(formatter)
+console_handler.setFormatter(formatter)
+
+logger.addHandler(file_handler)
+logger.addHandler(console_handler)
 
 print("🔥 SCRIPT STARTED")
 
