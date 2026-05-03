@@ -202,8 +202,8 @@ def check_finished_matches():
                 "result": result,
             
                 # 🔥 SCORES
-                "track_score": data["track_score"],
-                "signal_score": data["signal_score"],
+                "track_score": data.get("track_score", data.get("initial_score", "N/A")),
+                "signal_score": data.get("signal_score", data.get("initial_score", "N/A")),
                 "final_score": f"{final_home}-{final_away}",
             
                 # 🔥 TIMING
@@ -217,7 +217,7 @@ def check_finished_matches():
             
                 # 🔥 MODEL
                 "model_score": data["model_score"],
-                "signal_tier": data["signal_tier"],
+                "signal_tier": data.get("signal_tier", "UNKNOWN"),
             
                 # 🔥 EXTRA
                 "goals_at_signal": data["goals_at_signal"]
