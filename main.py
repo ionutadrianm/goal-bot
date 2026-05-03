@@ -208,6 +208,9 @@ def run():
                     if not minute:
                         continue
 
+                    if minute < 30 or minute > 70:
+                        continue
+
                     home = teams["home"]["name"]
                     away = teams["away"]["name"]
 
@@ -223,7 +226,11 @@ def run():
                     if stats is None:
                         continue
 
-                    print(f"CHECK → {home} | min:{minute} | shots:{stats['shots']} sot:{stats['sot']}")
+                    if 35 <= minute <= 45:
+                        print(f"🟡 TRACK WINDOW → {home} | shots:{stats['shots']} sot:{stats['sot']}")
+                    
+                    if 50 <= minute <= 65:
+                        print(f"🔵 CONFIRM WINDOW → {home} | shots:{stats['shots']} sot:{stats['sot']}")
 
                     # =========================
                     # TRACK PHASE
