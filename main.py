@@ -240,24 +240,24 @@ def run():
                     # PHASE 1 — TRACK
                     # =========================
                     if 35 <= minute <= 45:
-
-                    print(f"🟡 TRACK CHECK → {home} | min:{minute} | shots:{stats['shots']} sot:{stats['sot']}")
-                
-                    if match_id in tracked_matches:
-                        print(f"❌ ALREADY TRACKED → {home}")
+                    
+                        print(f"🟡 TRACK CHECK → {home} | min:{minute} | shots:{stats['shots']} sot:{stats['sot']}")
+                    
+                        if match_id in tracked_matches:
+                            print(f"❌ ALREADY TRACKED → {home}")
+                            continue
+                    
+                        if stats["shots"] < 6:
+                        print(f"❌ TRACK FAIL (LOW SHOTS) → {home}")
                         continue
-                
-                    if stats["sot"] < 2:
-                        print(f"❌ TRACK FAIL (LOW SOT) → {home} | sot:{stats['sot']}")
-                        continue
-
+                    
                         tracked_matches[match_id] = {
                             "teams": f"{home} vs {away}",
                             "first_stats": stats,
                             "score": f"{home_goals}-{away_goals}",
                             "minute": minute
                         }
-
+                    
                         print(f"🧠 TRACKED → {home} vs {away}")
 
                     # =========================
