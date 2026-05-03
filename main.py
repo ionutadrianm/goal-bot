@@ -6,10 +6,12 @@ import time
 import os
 from datetime import datetime
 import json
-
 import logging
 from logging.handlers import RotatingFileHandler
 
+# =========================
+# LOGGING (FILE + CONSOLE)
+# =========================
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
@@ -23,8 +25,6 @@ console_handler.setFormatter(formatter)
 
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
-
-print("🔥 SCRIPT STARTED")
 
 logging.info("🔥 Bot started")
 
@@ -53,7 +53,7 @@ def send_telegram(msg):
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
         requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
     except Exception as e:
-        print("Telegram error:", e)
+        logging.error(f"Telegram error: {e}")
 
 # =========================
 # API
@@ -64,7 +64,7 @@ def get_live_matches():
         data = r.json()
         return data.get("response", [])
     except Exception as e:
-        print("Live matches error:", e)
+        logging.error(f"Live matches error: {e}")
         return []
 
 def get_stats(fixture_id):
@@ -94,7 +94,7 @@ def get_stats(fixture_id):
         return stats
 
     except Exception as e:
-        print("Stats error:", e)
+        logging.error(f"Stats error: {e}")
         return None
 
 # =========================
@@ -116,18 +116,19 @@ def save_result_to_file(data):
         with open("results.json", "a") as f:
             f.write(json.dumps(data) + "\n")
     except Exception as e:
-        print("Save error:", e)
+        logging.error(f"Save error: {e}")
 
 # =========================
 # RESULT CHECKER
 # =========================
 def check_finished_matches():
-    print("📊 Checking results...")
+    logging.info("📊 Checking results...")
 
     for match_id, data in list(seen_matches.items()):
         try:
             time_since = (datetime.now() - data["time"]).total_seconds()
-            if time_since < 2400:
+
+            if time_since < 2400:  # ~40 min wait
                 continue
 
             r = requests.get(f"{BASE_URL}/fixtures?id={match_id}", headers=HEADERS)
@@ -151,7 +152,7 @@ def check_finished_matches():
 
             result = "✅ WIN" if final_total >= initial_total + 2 else "❌ LOSS"
 
-            # 🔥 SAVE FULL DATASET
+            # SAVE FULL DATASET
             save_result_to_file({
                 "match": data["teams"],
                 "result": result,
@@ -165,10 +166,8 @@ def check_finished_matches():
                 "goals_at_signal": data["goals_at_signal"],
                 "model_score": data["model_score"]
             })
-            
-            # ✅ ADD THESE 2 LINES HERE
-            print(f"✅ RESULT → {data['teams']} | {result} | final:{final_home}-{final_away}")
-            logging.info(f"RESULT → {data['teams']} | {result} | final:{final_home}-{final_away}")
+
+            logging.info(f"✅ RESULT → {data['teams']} | {result} | {final_home}-{final_away}")
 
             send_telegram(f"""
 📊 RESULT UPDATE
@@ -183,7 +182,7 @@ Final: {final_home}-{final_away}
             del seen_matches[match_id]
 
         except Exception as e:
-            print("Result error:", e)
+            logging.error(f"Result error: {e}")
 
 # =========================
 # MAIN LOOP
@@ -191,24 +190,20 @@ Final: {final_home}-{final_away}
 def run():
     global last_result_check
 
-    print("🚀 PRO SCANNER RUNNING")
+    logging.info("🚀 PRO SCANNER RUNNING")
 
     while True:
         try:
-            print("\n🔁 NEW SCAN", datetime.now())
-            logging.info("🔁 New scan cycle")
-            
+            logging.info("🔁 NEW SCAN")
+
             matches = get_live_matches()
-            logging.info("📡 Fetching live matches")
-            
+
             if not matches:
-                print("⚠️ No live matches")
+                logging.warning("⚠️ No live matches")
                 time.sleep(60)
                 continue
-                
-            logging.info(f"Matches fetched: {len(matches)}")
-            
-            print(f"📊 Matches: {len(matches)}")
+
+            logging.info(f"📊 Matches: {len(matches)}")
 
             for m in matches[:80]:
                 try:
@@ -222,6 +217,7 @@ def run():
                     if not minute:
                         continue
 
+                    # 🔥 TIME FILTER (CRITICAL)
                     if minute < 30 or minute > 70:
                         continue
 
@@ -232,7 +228,6 @@ def run():
                     away_goals = goals["away"] or 0
                     total = home_goals + away_goals
 
-                    # 🔥 DEAD GAME FILTER
                     if total >= 3:
                         continue
 
@@ -243,7 +238,7 @@ def run():
                     # =========================
                     # TRACK PHASE
                     # =========================
-                    if 30 <= minute <= 50:
+                    if 30 <= minute <= 45:
 
                         if match_id not in tracked_matches:
 
@@ -255,9 +250,7 @@ def run():
                                     "score": f"{home_goals}-{away_goals}"
                                 }
 
-                                msg = f"TRACKED → {home} vs {away} | min:{minute} | shots:{stats['shots']} sot:{stats['sot']}"
-                                print(msg)
-                                logging.info(msg)
+                                logging.info(f"🧠 TRACKED → {home} vs {away} | min:{minute}")
 
                     # =========================
                     # CONFIRM PHASE
@@ -272,11 +265,10 @@ def run():
 
                         first = tracked_matches[match_id]
 
-                        # momentum check
                         if stats["shots"] <= first["track_stats"]["shots"]:
                             continue
 
-                        if stats["sot"] < 1:
+                        if stats["sot"] < 2:
                             continue
 
                         score = 50
@@ -285,7 +277,7 @@ def run():
                             score += 15
                         if stats["shots"] >= 10:
                             score += 10
-                        if stats["sot"] >= 3:
+                        if stats["sot"] >= 4:
                             score += 15
 
                         tier = classify(score)
@@ -303,32 +295,24 @@ Corners: {stats['corners']}
 ➡️ Over 1.5 2nd half
 """)
 
-                        # 🔥 SAVE FULL SIGNAL DATA
                         seen_matches[match_id] = {
                             "time": datetime.now(),
                             "teams": f"{home} vs {away}",
-
                             "initial_score": f"{home_goals}-{away_goals}",
                             "goals_at_signal": total,
-
                             "track_minute": first["track_minute"],
                             "track_stats": first["track_stats"],
-
                             "signal_minute": minute,
                             "signal_stats": stats,
-
                             "delta": {
                                 "shots": stats["shots"] - first["track_stats"]["shots"],
                                 "sot": stats["sot"] - first["track_stats"]["sot"],
                                 "corners": stats["corners"] - first["track_stats"]["corners"]
                             },
-
                             "model_score": score
                         }
 
-                        msg = f"SIGNAL → {home} vs {away} | min:{minute} | score:{home_goals}-{away_goals} | shots:{stats['shots']} sot:{stats['sot']}"
-                        print(msg)
-                        logging.info(msg)
+                        logging.info(f"🚀 SIGNAL → {home} vs {away} | min:{minute}")
 
                 except Exception as e:
                     logging.error(f"Match error: {e}")
@@ -341,6 +325,7 @@ Corners: {stats['corners']}
             if seen_matches and current_time - last_result_check > 1800:
                 check_finished_matches()
                 last_result_check = current_time
+
             time.sleep(300)
 
         except Exception as e:
