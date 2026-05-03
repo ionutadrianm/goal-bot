@@ -1,4 +1,3 @@
-print("🔑 API KEY LOADED:", API_KEY[:6] if API_KEY else "NONE")
 import requests
 import time
 import os
@@ -6,6 +5,8 @@ from datetime import datetime
 import json
 from dotenv import load_dotenv
 load_dotenv()
+
+print("🔑 API KEY LOADED:", API_KEY[:6] if API_KEY else "NONE")
 
 # =========================
 # CONFIG
