@@ -96,9 +96,6 @@ def get_stats(fixture_id):
 # =========================
 # LOGIC
 # =========================
-def second_half_goals(events):
-    return sum(1 for e in events if e["type"] == "Goal" and e["time"]["elapsed"] >= 46)
-
 def classify(score):
     if score >= 85:
         return "🔥 ELITE"
@@ -127,7 +124,6 @@ def check_finished_matches():
 
     for match_id, data in list(seen_matches.items()):
         try:
-            # wait at least 90 min after signal
             time_since = (datetime.now() - data["time"]).total_seconds()
             if time_since < 5400:
                 continue
@@ -191,7 +187,6 @@ def run():
             print("\n🔁 NEW SCAN CYCLE")
             print("💓 alive:", datetime.now())
 
-            # SAFE API CALL
             matches = get_live_matches()
 
             if not matches:
@@ -220,71 +215,59 @@ def run():
                     away_goals = goals["away"] or 0
                     total = home_goals + away_goals
 
-                    # ❌ skip dead games
                     if total >= 3:
                         continue
 
                     stats = get_stats(match_id)
 
-                    # ❌ no stats available at all
                     if stats is None:
-                        print(f"❌ NO STATS → {home} vs {away}")
                         continue
-                    
-                    # 🔍 DEBUG SNAPSHOT (KEY LINE)
-                    print(f"CHECK → {home} vs {away} | min:{minute} | shots:{stats['shots']} sot:{stats['sot']} corners:{stats['corners']}")
 
-                    print(f"DEBUG → {home} vs {away} | min:{minute} | stats:{stats}")
+                    print(f"CHECK → {home} | min:{minute} | shots:{stats['shots']} sot:{stats['sot']}")
 
                     # =========================
-                    # PHASE 1 — TRACK
+                    # TRACK PHASE
                     # =========================
                     if 35 <= minute <= 45:
-                    
-                        print(f"🟡 TRACK CHECK → {home} | min:{minute} | shots:{stats['shots']} sot:{stats['sot']}")
-                    
+
+                        print(f"🟡 TRACK CHECK → {home}")
+
                         if match_id in tracked_matches:
-                            print(f"❌ ALREADY TRACKED → {home}")
                             continue
-                    
+
                         if stats["shots"] < 6:
-                        print(f"❌ TRACK FAIL (LOW SHOTS) → {home}")
-                        continue
-                    
+                            print(f"❌ TRACK FAIL → {home}")
+                            continue
+
                         tracked_matches[match_id] = {
                             "teams": f"{home} vs {away}",
                             "first_stats": stats,
-                            "score": f"{home_goals}-{away_goals}",
-                            "minute": minute
+                            "score": f"{home_goals}-{away_goals}"
                         }
-                    
-                        print(f"🧠 TRACKED → {home} vs {away}")
+
+                        print(f"🧠 TRACKED → {home}")
 
                     # =========================
-                    # PHASE 2 — CONFIRM
+                    # CONFIRM PHASE
                     # =========================
                     if 50 <= minute <= 65:
 
-                    print(f"🔵 CONFIRM CHECK → {home} | min:{minute} | shots:{stats['shots']} sot:{stats['sot']}")
-                
-                    if match_id not in tracked_matches:
-                        print(f"❌ NOT TRACKED BEFORE → {home}")
-                        continue
-                
-                    if match_id in seen_matches:
-                        print(f"❌ ALREADY SENT → {home}")
-                        continue
+                        print(f"🔵 CONFIRM CHECK → {home}")
 
-                        first = tracked_matches[match_id]
-                        first_stats = first["first_stats"]
-
-                        # momentum check
-                        if stats["shots"] <= first_stats["shots"]:
-                            print(f"❌ NO MOMENTUM → {home} | {stats['shots']} <= {first_stats['shots']}")
+                        if match_id not in tracked_matches:
                             continue
 
-                        if stats["sot"] < 3:
-                            print(f"❌ CONFIRM FAIL (LOW SOT) → {home} | sot:{stats['sot']}")
+                        if match_id in seen_matches:
+                            continue
+
+                        first_stats = tracked_matches[match_id]["first_stats"]
+
+                        if stats["shots"] <= first_stats["shots"]:
+                            print(f"❌ NO MOMENTUM → {home}")
+                            continue
+
+                        if stats["sot"] < 2:
+                            print(f"❌ LOW SOT → {home}")
                             continue
 
                         score = 50
@@ -321,14 +304,11 @@ Corners: {stats['corners']}
                             "model_score": score
                         }
 
-                        print(f"🚀 SIGNAL SENT → {home} vs {away}")
+                        print(f"🚀 SIGNAL SENT → {home}")
 
                 except Exception as e:
                     print("Match error:", e)
 
-            # =========================
-            # RESULT CHECK (30 min)
-            # =========================
             current_time = time.time()
 
             if seen_matches and current_time - last_result_check > 1800:
