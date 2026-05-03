@@ -182,15 +182,27 @@ def check_finished_matches():
             save_result_to_file({
                 "match": data["teams"],
                 "result": result,
-                "initial_score": data["initial_score"],
+            
+                # 🔥 SCORES
+                "track_score": data["track_score"],
+                "signal_score": data["signal_score"],
                 "final_score": f"{final_home}-{final_away}",
+            
+                # 🔥 TIMING
                 "track_minute": data["track_minute"],
                 "signal_minute": data["signal_minute"],
+            
+                # 🔥 STATS
                 "track_stats": data["track_stats"],
                 "signal_stats": data["signal_stats"],
                 "delta": data["delta"],
-                "goals_at_signal": data["goals_at_signal"],
-                "model_score": data["model_score"]
+            
+                # 🔥 MODEL
+                "model_score": data["model_score"],
+                "signal_tier": data["signal_tier"],
+            
+                # 🔥 EXTRA
+                "goals_at_signal": data["goals_at_signal"]
             })
 
             logging.info(f"✅ RESULT → {data['teams']} | {result} | {final_home}-{final_away}")
@@ -318,19 +330,35 @@ Corners: {stats['corners']}
 
                         seen_matches[match_id] = {
                             "time": datetime.now(),
+                        
                             "teams": f"{home} vs {away}",
+                        
+                            # 🔥 SCORES
+                            "track_score": first["score"],
+                            "signal_score": f"{home_goals}-{away_goals}",
                             "initial_score": f"{home_goals}-{away_goals}",
-                            "goals_at_signal": total,
+                        
+                            # 🔥 MINUTES
                             "track_minute": first["track_minute"],
-                            "track_stats": first["track_stats"],
                             "signal_minute": minute,
+                        
+                            # 🔥 STATS
+                            "track_stats": first["track_stats"],
                             "signal_stats": stats,
+                        
+                            # 🔥 MOMENTUM
                             "delta": {
                                 "shots": stats["shots"] - first["track_stats"]["shots"],
                                 "sot": stats["sot"] - first["track_stats"]["sot"],
                                 "corners": stats["corners"] - first["track_stats"]["corners"]
                             },
-                            "model_score": score
+                        
+                            # 🔥 MODEL INFO
+                            "model_score": score,
+                            "signal_tier": tier,
+                        
+                            # 🔥 EXTRA
+                            "goals_at_signal": total
                         }
 
                         save_signals()
