@@ -22,6 +22,22 @@ HEADERS = {
     "x-apisports-key": API_KEY
 }
 
+print("\n🧪 DIRECT API TEST START")
+
+test_url = f"{BASE_URL}/fixtures?live=all"
+test_response = requests.get(test_url, headers=HEADERS)
+
+print("📡 STATUS:", test_response.status_code)
+print("📦 RESPONSE:", test_response.text[:500])
+
+try:
+    data = test_response.json()
+    print("📊 COUNT:", len(data.get("response", [])))
+except Exception as e:
+    print("❌ JSON ERROR:", e)
+
+print("🧪 DIRECT API TEST END\n")
+
 seen_matches = {}
 tracked_matches = {}
 last_result_check = 0
