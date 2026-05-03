@@ -1,37 +1,22 @@
-print("🔥 SCRIPT STARTED")
 from dotenv import load_dotenv
 load_dotenv()
+
 import requests
 import time
 import os
 from datetime import datetime
 import json
 
+print("🔥 SCRIPT STARTED")
+
 # =========================
 # CONFIG
 # =========================
 API_KEY = os.getenv("API_FOOTBALL_KEY")
-print("🔑 API KEY:", API_KEY[:6] if API_KEY else "NONE")
-
-print("\n🧪 DIRECT API TEST START")
-
-test_url = f"{BASE_URL}/fixtures?live=all"
-test_response = requests.get(test_url, headers=HEADERS)
-
-print("📡 STATUS:", test_response.status_code)
-print("📦 RESPONSE:", test_response.text[:300])
-
-try:
-    data = test_response.json()
-    print("📊 COUNT:", len(data.get("response", [])))
-except Exception as e:
-    print("❌ JSON ERROR:", e)
-
-print("🧪 DIRECT API TEST END\n")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-print("🔑 API KEY LOADED:", API_KEY[:6] if API_KEY else "NONE")
+print("🔑 API KEY:", API_KEY[:6] if API_KEY else "NONE")
 
 BASE_URL = "https://v3.football.api-sports.io"
 
@@ -54,38 +39,15 @@ def send_telegram(msg):
         print("Telegram error:", e)
 
 # =========================
-# API CALLS
+# API
 # =========================
 def get_live_matches():
-    print("📡 ENTER get_live_matches()")
-
     try:
-        url = f"{BASE_URL}/fixtures?live=all"
-        print("🌐 URL:", url)
-
-        r = requests.get(url, headers=HEADERS)
-
-        print("📡 STATUS:", r.status_code)
-        print("📦 FULL RESPONSE:", r.text[:1000])
-
+        r = requests.get(f"{BASE_URL}/fixtures?live=all", headers=HEADERS)
         data = r.json()
-
-        print("📊 RESULTS COUNT:", len(data.get("response", [])))
-
-        if "errors" in data:
-            print("❌ API ERRORS:", data["errors"])
-
         return data.get("response", [])
-
     except Exception as e:
-        print("❌ Live matches error:", e)
-        return []
-
-def get_events(fixture_id):
-    try:
-        r = requests.get(f"{BASE_URL}/fixtures/events?fixture={fixture_id}", headers=HEADERS)
-        return r.json().get("response", [])
-    except:
+        print("Live matches error:", e)
         return []
 
 def get_stats(fixture_id):
@@ -130,22 +92,17 @@ def classify(score):
         return "⚡ MEDIUM"
 
 # =========================
-# SAVE RESULTS
+# RESULTS
 # =========================
 def save_result_to_file(data):
     try:
-        line = json.dumps(data)
-        print("📦 RESULT:", line)
         with open("results.json", "a") as f:
-            f.write(line + "\n")
+            f.write(json.dumps(data) + "\n")
     except Exception as e:
         print("Save error:", e)
 
-# =========================
-# RESULT CHECKER
-# =========================
 def check_finished_matches():
-    print("📊 Checking finished matches...")
+    print("📊 Checking results...")
 
     for match_id, data in list(seen_matches.items()):
         try:
@@ -164,7 +121,6 @@ def check_finished_matches():
             status = fixture["status"]["short"]
 
             if status not in ["FT", "AET", "PEN"]:
-                print(f"⏱ Still live: {status}")
                 continue
 
             final_home = goals["home"] or 0
@@ -180,7 +136,6 @@ def check_finished_matches():
                 "result": result,
                 "initial_score": data["initial_score"],
                 "final_score": f"{final_home}-{final_away}",
-                "model_score": data["model_score"],
                 "stats": data["stats"]
             })
 
@@ -197,16 +152,7 @@ Final: {final_home}-{final_away}
             del seen_matches[match_id]
 
         except Exception as e:
-            print("Result check error:", e)
-
-import threading
-
-def heartbeat():
-    while True:
-        print(f"💓 heartbeat: {datetime.now()}")
-        time.sleep(60)
-
-# threading.Thread(target=heartbeat, daemon=True).start()
+            print("Result error:", e)
 
 # =========================
 # MAIN LOOP
@@ -217,22 +163,19 @@ def run():
     print("🚀 PRO SCANNER RUNNING")
 
     while True:
-        print("🔁 LOOP START")
         try:
-            print("\n🔁 NEW SCAN CYCLE")
-            print("💓 alive:", datetime.now())
-            print("📡 CALLING FUNCTION get_live_matches...")
+            print("\n🔁 NEW SCAN", datetime.now())
+
             matches = get_live_matches()
-            print("📡 RETURNED MATCHES:", len(matches))
 
             if not matches:
-                print("⚠️ No matches found")
+                print("⚠️ No live matches")
                 time.sleep(60)
                 continue
 
-            print(f"📊 Found {len(matches)} matches")
+            print(f"📊 Matches: {len(matches)}")
 
-            for m in matches[:50]:
+            for m in matches[:80]:
                 try:
                     fixture = m["fixture"]
                     teams = m["teams"]
@@ -244,6 +187,7 @@ def run():
                     if not minute:
                         continue
 
+                    # ⛔ TIME FILTER
                     if minute < 30 or minute > 70:
                         continue
 
@@ -254,48 +198,34 @@ def run():
                     away_goals = goals["away"] or 0
                     total = home_goals + away_goals
 
+                    # ⛔ DEAD GAME
                     if total >= 3:
                         continue
 
                     stats = get_stats(match_id)
-
                     if stats is None:
                         continue
 
-                    if 35 <= minute <= 45:
-                        print(f"🟡 TRACK WINDOW → {home} | shots:{stats['shots']} sot:{stats['sot']}")
-                    
-                    if 50 <= minute <= 65:
-                        print(f"🔵 CONFIRM WINDOW → {home} | shots:{stats['shots']} sot:{stats['sot']}")
+                    # =========================
+                    # TRACK
+                    # =========================
+                    if 30 <= minute <= 50:
+
+                        if match_id not in tracked_matches:
+
+                            if stats["shots"] >= 5:
+                                tracked_matches[match_id] = {
+                                    "teams": f"{home} vs {away}",
+                                    "first_stats": stats,
+                                    "score": f"{home_goals}-{away_goals}"
+                                }
+
+                                print(f"🧠 TRACKED → {home}")
 
                     # =========================
-                    # TRACK PHASE
-                    # =========================
-                    if 35 <= minute <= 45:
-
-                        print(f"🟡 TRACK CHECK → {home}")
-
-                        if match_id in tracked_matches:
-                            continue
-
-                        if stats["shots"] < 6:
-                            print(f"❌ TRACK FAIL → {home}")
-                            continue
-
-                        tracked_matches[match_id] = {
-                            "teams": f"{home} vs {away}",
-                            "first_stats": stats,
-                            "score": f"{home_goals}-{away_goals}"
-                        }
-
-                        print(f"🧠 TRACKED → {home}")
-
-                    # =========================
-                    # CONFIRM PHASE
+                    # CONFIRM
                     # =========================
                     if 50 <= minute <= 65:
-
-                        print(f"🔵 CONFIRM CHECK → {home}")
 
                         if match_id not in tracked_matches:
                             continue
@@ -306,11 +236,9 @@ def run():
                         first_stats = tracked_matches[match_id]["first_stats"]
 
                         if stats["shots"] <= first_stats["shots"]:
-                            print(f"❌ NO MOMENTUM → {home}")
                             continue
 
-                        if stats["sot"] < 2:
-                            print(f"❌ LOW SOT → {home}")
+                        if stats["sot"] < 1:
                             continue
 
                         score = 50
@@ -319,12 +247,12 @@ def run():
                             score += 15
                         if stats["shots"] >= 10:
                             score += 10
-                        if stats["sot"] >= 4:
+                        if stats["sot"] >= 3:
                             score += 15
 
                         tier = classify(score)
 
-                        msg = f"""{tier} CONFIRMED SIGNAL
+                        send_telegram(f"""{tier} SIGNAL
 
 {home} vs {away}
 Min: {minute}'
@@ -335,46 +263,34 @@ SOT: {stats['sot']}
 Corners: {stats['corners']}
 
 ➡️ Over 1.5 2nd half
-"""
-
-                        send_telegram(msg)
+""")
 
                         seen_matches[match_id] = {
                             "time": datetime.now(),
                             "teams": f"{home} vs {away}",
                             "initial_score": f"{home_goals}-{away_goals}",
-                            "stats": stats,
-                            "model_score": score
+                            "stats": stats
                         }
 
-                        print(f"🚀 SIGNAL SENT → {home}")
+                        print(f"🚀 SIGNAL → {home}")
 
                 except Exception as e:
                     print("Match error:", e)
 
+            # RESULTS CHECK
             current_time = time.time()
-
             if seen_matches and current_time - last_result_check > 1800:
-                print("🕒 Running result check...")
                 check_finished_matches()
                 last_result_check = current_time
-                
-            print("✅ LOOP COMPLETED")
-            print("⏳ Sleeping 5 min before next scan...")
-            
-            print("⏳ Keeping alive...")
 
-            for i in range(300):
-                print(f"tick {i}")
-                time.sleep(1)
+            time.sleep(300)
 
         except Exception as e:
-            print("❌ LOOP ERROR:", e)
+            print("LOOP ERROR:", e)
             time.sleep(60)
 
 # =========================
 # START
 # =========================
 if __name__ == "__main__":
-    print("🚀 STARTING MAIN")
     run()
