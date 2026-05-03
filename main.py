@@ -617,9 +617,12 @@ def run():
                         value = calculate_value(book_odds, fair_odds) if book_odds else None
 
                         if value is None or value < 5:
+                        if value is None or value < 5:
                         logging.info(
                             f"⛔ SKIPPED → {home} vs {away} | "
-                            f"book:{book_odds} fair:{fair_odds} prob:{round(prob*100)}% value:{value}"
+                            f"book:{book_odds if 'book_odds' in locals() else None} "
+                            f"fair:{fair_odds if 'fair_odds' in locals() else None} "
+                            f"value:{value}"
                         )
                         continue
 
