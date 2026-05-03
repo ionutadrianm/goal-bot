@@ -10,7 +10,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 
 # =========================
-# LOGGING (FILE + CONSOLE)
+# LOGGING
 # =========================
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -44,6 +44,33 @@ HEADERS = {
 seen_matches = {}
 tracked_matches = {}
 last_result_check = 0
+
+SIGNALS_FILE = "signals.json"
+
+# =========================
+# PERSISTENCE
+# =========================
+def save_signals():
+    try:
+        with open(SIGNALS_FILE, "w") as f:
+            json.dump(seen_matches, f, default=str)
+    except Exception as e:
+        logging.error(f"Save signals error: {e}")
+
+def load_signals():
+    global seen_matches
+    try:
+        if os.path.exists(SIGNALS_FILE):
+            with open(SIGNALS_FILE, "r") as f:
+                data = json.load(f)
+
+                for k, v in data.items():
+                    v["time"] = datetime.fromisoformat(v["time"])
+
+                seen_matches = data
+                logging.info(f"📂 Loaded {len(seen_matches)} active signals")
+    except Exception as e:
+        logging.error(f"Load signals error: {e}")
 
 # =========================
 # TELEGRAM
@@ -128,7 +155,7 @@ def check_finished_matches():
         try:
             time_since = (datetime.now() - data["time"]).total_seconds()
 
-            if time_since < 2400:  # ~40 min wait
+            if time_since < 2400:
                 continue
 
             r = requests.get(f"{BASE_URL}/fixtures?id={match_id}", headers=HEADERS)
@@ -152,7 +179,6 @@ def check_finished_matches():
 
             result = "✅ WIN" if final_total >= initial_total + 2 else "❌ LOSS"
 
-            # SAVE FULL DATASET
             save_result_to_file({
                 "match": data["teams"],
                 "result": result,
@@ -180,6 +206,7 @@ Final: {final_home}-{final_away}
 """)
 
             del seen_matches[match_id]
+            save_signals()
 
         except Exception as e:
             logging.error(f"Result error: {e}")
@@ -217,7 +244,6 @@ def run():
                     if not minute:
                         continue
 
-                    # 🔥 TIME FILTER (CRITICAL)
                     if minute < 30 or minute > 70:
                         continue
 
@@ -235,13 +261,10 @@ def run():
                     if stats is None:
                         continue
 
-                    # =========================
-                    # TRACK PHASE
-                    # =========================
+                    # TRACK
                     if 30 <= minute <= 45:
 
                         if match_id not in tracked_matches:
-
                             if stats["shots"] >= 5:
                                 tracked_matches[match_id] = {
                                     "teams": f"{home} vs {away}",
@@ -252,9 +275,7 @@ def run():
 
                                 logging.info(f"🧠 TRACKED → {home} vs {away} | min:{minute}")
 
-                    # =========================
-                    # CONFIRM PHASE
-                    # =========================
+                    # CONFIRM
                     if 50 <= minute <= 65:
 
                         if match_id not in tracked_matches:
@@ -312,19 +333,20 @@ Corners: {stats['corners']}
                             "model_score": score
                         }
 
+                        save_signals()
+
                         logging.info(f"🚀 SIGNAL → {home} vs {away} | min:{minute}")
 
                 except Exception as e:
                     logging.error(f"Match error: {e}")
 
-            # =========================
-            # RESULT CHECK
-            # =========================
             current_time = time.time()
 
             if seen_matches and current_time - last_result_check > 1800:
                 check_finished_matches()
                 last_result_check = current_time
+
+            save_signals()
 
             time.sleep(300)
 
@@ -336,4 +358,5 @@ Corners: {stats['corners']}
 # START
 # =========================
 if __name__ == "__main__":
+    load_signals()
     run()
