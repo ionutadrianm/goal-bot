@@ -144,6 +144,26 @@ def get_stats(fixture_id):
         logging.error(f"Stats error: {e}")
         return None
 
+def get_odds(fixture_id):
+    try:
+        r = requests.get(f"{BASE_URL}/odds?fixture={fixture_id}", headers=HEADERS)
+        data = r.json().get("response", [])
+
+        if not data:
+            return None
+
+        for book in data[0].get("bookmakers", []):
+            for bet in book.get("bets", []):
+                if bet["name"] == "Goals Over/Under":
+                    return bet["values"]
+
+        return None
+
+    except Exception as e:
+        logging.error(f"Odds error: {e}")
+        return None
+
+
 # =========================
 # LOGIC
 # =========================
@@ -155,15 +175,59 @@ def classify(score):
     else:
         return "⚡ MEDIUM"
 
+def estimate_probability(stats, delta, minute):
+    prob = 0.45
+
+    if stats["shots"] >= 10:
+        prob += 0.10
+
+    if stats["sot"] >= 4:
+        prob += 0.15
+
+    if delta["shots"] >= 3:
+        prob += 0.10
+
+    if minute >= 60:
+        prob += 0.05
+
+    return min(prob, 0.85)
+
+def prob_to_odds(prob):
+    if prob == 0:
+        return None
+    return round(1 / prob, 2)
+
+def get_target_odds(odds_data, total_goals):
+    if not odds_data:
+        return None
+
+    target = float(total_goals) + 1.5
+
+    for o in odds_data:
+        try:
+            val = o["value"].replace("Over ", "").strip()
+            if abs(float(val) - target) < 0.01:
+                return float(o["odd"])
+        except:
+            continue
+
+    return None
+    
+def calculate_value(book_odds, fair_odds):
+    try:
+        return round(((book_odds / fair_odds) - 1) * 100, 2)
+    except:
+        return None
+        
 # =========================
 # SAVE RESULTS
 # =========================
 def save_result_to_file(data):
     try:
         with open("results.json", "a") as f:
-            f.write(json.dumps(data) + "\n")
+            f.write(json.dumps(data, default=str) + "\n")
     except Exception as e:
-        logging.error(f"Save error: {e}")
+        logging.error(f"Save JSON error: {e}")
 
 def save_result_to_csv(data):
     try:
@@ -176,21 +240,33 @@ def save_result_to_csv(data):
                 "signal_tier",
                 "model_score",
 
+                # 🔥 ODDS + VALUE
+                "book_odds",
+                "fair_odds",
+                "model_prob",
+                "value",
+
+                # SCORES
                 "track_score",
                 "signal_score",
                 "final_score",
 
+                # TIME
                 "track_minute",
                 "signal_minute",
-
+                "signal_time",
+                
+                # TRACK STATS
                 "track_shots",
                 "track_sot",
                 "track_corners",
 
+                # SIGNAL STATS
                 "signal_shots",
                 "signal_sot",
                 "signal_corners",
 
+                # DELTA
                 "delta_shots",
                 "delta_sot",
                 "delta_corners",
@@ -207,21 +283,33 @@ def save_result_to_csv(data):
                 "signal_tier": data.get("signal_tier"),
                 "model_score": data.get("model_score"),
 
+                # 🔥 NEW DATA
+                "book_odds": data.get("book_odds"),
+                "fair_odds": data.get("fair_odds"),
+                "model_prob": round(data.get("model_prob", 0), 3) if data.get("model_prob") else None,
+                "value": data.get("value"),
+
+                # SCORES
                 "track_score": data.get("track_score"),
                 "signal_score": data.get("signal_score"),
                 "final_score": data.get("final_score"),
 
+                # TIME
                 "track_minute": data.get("track_minute"),
                 "signal_minute": data.get("signal_minute"),
-
+                "signal_time": data.get("signal_time"),
+                
+                # TRACK STATS
                 "track_shots": data.get("track_stats", {}).get("shots"),
                 "track_sot": data.get("track_stats", {}).get("sot"),
                 "track_corners": data.get("track_stats", {}).get("corners"),
 
+                # SIGNAL STATS
                 "signal_shots": data.get("signal_stats", {}).get("shots"),
                 "signal_sot": data.get("signal_stats", {}).get("sot"),
                 "signal_corners": data.get("signal_stats", {}).get("corners"),
 
+                # DELTA
                 "delta_shots": data.get("delta", {}).get("shots"),
                 "delta_sot": data.get("delta", {}).get("sot"),
                 "delta_corners": data.get("delta", {}).get("corners"),
@@ -261,7 +349,7 @@ def generate_performance_report():
                     if r["result"] == "✅ WIN":
                         wins += 1
 
-                    tier = r.get("signal_tier", "⚡ UNKNOWN")
+                    tier = r.get("signal_tier", "⚡ MEDIUM")
 
                     if tier not in tiers:
                         tiers[tier] = {"total": 0, "wins": 0}
@@ -350,20 +438,32 @@ def check_finished_matches():
                 "match": data["teams"],
                 "result": result,
             
-                "track_score": data.get("track_score", data.get("initial_score")),
-                "signal_score": data.get("signal_score", data.get("initial_score")),
+                # SCORES
+                "track_score": data.get("track_score"),
+                "signal_score": data.get("signal_score"),
                 "final_score": f"{final_home}-{final_away}",
             
+                # TIME
                 "track_minute": data.get("track_minute"),
                 "signal_minute": data.get("signal_minute"),
-            
+                "signal_time": data.get("signal_time"),
+                
+                # STATS
                 "track_stats": data.get("track_stats"),
                 "signal_stats": data.get("signal_stats"),
                 "delta": data.get("delta"),
             
+                # MODEL
                 "model_score": data.get("model_score"),
-                "signal_tier": data.get("signal_tier", "UNKNOWN"),
+                "signal_tier": data.get("signal_tier"),
             
+                # ODDS + VALUE
+                "book_odds": data.get("book_odds"),
+                "fair_odds": data.get("fair_odds"),
+                "model_prob": data.get("model_prob"),
+                "value": data.get("value"),
+            
+                # EXTRA
                 "goals_at_signal": data.get("goals_at_signal")
             }
             
@@ -447,7 +547,8 @@ def run():
                                     "teams": f"{home} vs {away}",
                                     "track_minute": minute,
                                     "track_stats": stats,
-                                    "score": f"{home_goals}-{away_goals}"
+                                    "score": f"{home_goals}-{away_goals}",
+                                    "time": datetime.now()
                                 }
                                 save_tracked()
                                 logging.info(f"🧠 TRACKED → {home} vs {away} | min:{minute}")
@@ -497,49 +598,77 @@ def run():
 
                         tier = classify(score)
 
-                        send_telegram(f"""{tier} SIGNAL
+                        # =========================
+                        # ODDS + VALUE SYSTEM
+                        # =========================
+                        odds_data = get_odds(match_id)
+                        
+                        book_odds = get_target_odds(odds_data, total)
+                        
+                        delta = {
+                            "shots": stats["shots"] - first["track_stats"]["shots"],
+                            "sot": stats["sot"] - first["track_stats"]["sot"],
+                            "corners": stats["corners"] - first["track_stats"]["corners"]
+                        }
+                        
+                        prob = estimate_probability(stats, delta, minute)
+                        fair_odds = prob_to_odds(prob)
+                        
+                        value = calculate_value(book_odds, fair_odds) if book_odds else None
+
+                        if value is None or value < 5:
+                            logging.info(f"⛔ SKIPPED LOW VALUE → {home} vs {away} | value={value}")
+                            continue
+
+                        send_telegram(f"""{tier} VALUE SIGNAL
 
 {home} vs {away}
 Min: {minute}'
 Score: {home_goals}-{away_goals}
 
+🎯 Market: Over {total + 1.5}
+💰 Book Odds: {book_odds}
+🧠 Fair Odds: {fair_odds}
+📊 Model Prob: {round(prob*100)}%
+🔥 Value: {value}%
+
 Shots: {stats['shots']}
 SOT: {stats['sot']}
 Corners: {stats['corners']}
-
-➡️ Over 1.5 2nd half
 """)
 
                         seen_matches[match_id] = {
                             "time": datetime.now(),
-                        
                             "teams": f"{home} vs {away}",
                         
-                            # 🔥 SCORES
+                            # SCORES
                             "track_score": first["score"],
                             "signal_score": f"{home_goals}-{away_goals}",
                             "initial_score": f"{home_goals}-{away_goals}",
                         
-                            # 🔥 MINUTES
+                            # TIME
                             "track_minute": first["track_minute"],
                             "signal_minute": minute,
-                        
-                            # 🔥 STATS
+                            "signal_time": datetime.now().isoformat(),
+                            
+                            # STATS
                             "track_stats": first["track_stats"],
                             "signal_stats": stats,
                         
-                            # 🔥 MOMENTUM
-                            "delta": {
-                                "shots": stats["shots"] - first["track_stats"]["shots"],
-                                "sot": stats["sot"] - first["track_stats"]["sot"],
-                                "corners": stats["corners"] - first["track_stats"]["corners"]
-                            },
+                            # MOMENTUM
+                            "delta": delta,
                         
-                            # 🔥 MODEL INFO
+                            # MODEL
                             "model_score": score,
                             "signal_tier": tier,
                         
-                            # 🔥 EXTRA
+                            # ODDS + VALUE
+                            "book_odds": book_odds,
+                            "fair_odds": fair_odds,
+                            "model_prob": prob,
+                            "value": value,
+                        
+                            # EXTRA
                             "goals_at_signal": total
                         }
                         del tracked_matches[match_id]
@@ -561,10 +690,16 @@ Corners: {stats['corners']}
             # =========================
             # CLEANUP OLD TRACKED MATCHES
             # =========================
-            active_ids = [m["fixture"]["id"] for m in matches]
+            # CLEANUP OLD TRACKED MATCHES
+            now = datetime.now()
             
-            for mid in list(tracked_matches.keys()):
-                if mid not in active_ids:
+            for mid, t in list(tracked_matches.items()):
+                try:
+                    age = (now - datetime.fromisoformat(t["time"]) if isinstance(t["time"], str) else now - t["time"]).total_seconds()
+            
+                    if age > 3600:  # 1 hour
+                        del tracked_matches[mid]
+                except:
                     del tracked_matches[mid]
             
             save_tracked()
