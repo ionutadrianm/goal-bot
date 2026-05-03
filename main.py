@@ -14,7 +14,7 @@ API_KEY = os.getenv("API_FOOTBALL_KEY")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-print("🔑 FULL API KEY:", API_KEY)
+print("🔑 API KEY LOADED:", API_KEY[:6] if API_KEY else "NONE")
 
 BASE_URL = "https://v3.football.api-sports.io"
 
@@ -40,7 +40,29 @@ def send_telegram(msg):
 # API CALLS
 # =========================
 def get_live_matches():
-    raise Exception("🔥 TEST — FUNCTION CALLED")
+    print("📡 ENTER get_live_matches()")
+
+    try:
+        url = f"{BASE_URL}/fixtures?live=all"
+        print("🌐 URL:", url)
+
+        r = requests.get(url, headers=HEADERS)
+
+        print("📡 STATUS:", r.status_code)
+        print("📦 FULL RESPONSE:", r.text[:1000])
+
+        data = r.json()
+
+        print("📊 RESULTS COUNT:", len(data.get("response", [])))
+
+        if "errors" in data:
+            print("❌ API ERRORS:", data["errors"])
+
+        return data.get("response", [])
+
+    except Exception as e:
+        print("❌ Live matches error:", e)
+        return []
 
 def get_events(fixture_id):
     try:
