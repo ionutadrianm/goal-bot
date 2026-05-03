@@ -169,6 +169,7 @@ def run():
     print("🚀 PRO SCANNER RUNNING")
 
     while True:
+        print("🔁 LOOP START")
         try:
             print("\n🔁 NEW SCAN CYCLE")
             print("💓 alive:", datetime.now())
@@ -308,8 +309,11 @@ Corners: {stats['corners']}
                 print("🕒 Running result check...")
                 check_finished_matches()
                 last_result_check = current_time
-
+                
+            print("✅ LOOP COMPLETED")
+            print("⏳ Sleeping 5 min before next scan...")
             time.sleep(300)
+            continue
 
         except Exception as e:
             print("❌ LOOP ERROR:", e)
@@ -319,4 +323,9 @@ Corners: {stats['corners']}
 # START
 # =========================
 if __name__ == "__main__":
-    run()
+    while True:
+        try:
+            run()
+        except Exception as e:
+            print("🔥 Restarting after error:", e)
+            time.sleep(10)
