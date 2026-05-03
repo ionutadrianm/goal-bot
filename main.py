@@ -38,10 +38,21 @@ def send_telegram(msg):
 # =========================
 def get_live_matches():
     try:
-        r = requests.get(f"{BASE_URL}/fixtures?live=all", headers=HEADERS)
-        return r.json().get("response", [])
+        url = f"{BASE_URL}/fixtures?live=all"
+        r = requests.get(url, headers=HEADERS)
+
+        print("🌐 URL:", url)
+        print("📡 STATUS:", r.status_code)
+        print("📦 RAW RESPONSE:", r.text[:500])  # first 500 chars
+
+        data = r.json()
+
+        print("📊 API RESULTS COUNT:", len(data.get("response", [])))
+
+        return data.get("response", [])
+
     except Exception as e:
-        print("Live matches error:", e)
+        print("❌ Live matches error:", e)
         return []
 
 def get_events(fixture_id):
