@@ -40,26 +40,7 @@ def send_telegram(msg):
 # API CALLS
 # =========================
 def get_live_matches():
-    print("📡 ENTER get_live_matches()")   # 👈 MUST PRINT
-
-    try:
-        url = f"{BASE_URL}/fixtures?live=all"
-        print("🌐 URL:", url)
-
-        r = requests.get(url, headers=HEADERS)
-
-        print("📡 STATUS:", r.status_code)
-        print("📦 RAW RESPONSE:", r.text[:300])
-
-        data = r.json()
-
-        print("📊 API RESULTS COUNT:", len(data.get("response", [])))
-
-        return data.get("response", [])
-
-    except Exception as e:
-        print("❌ Live matches error:", e)
-        return []
+    raise Exception("🔥 TEST — FUNCTION CALLED")
 
 def get_events(fixture_id):
     try:
