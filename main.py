@@ -3,8 +3,8 @@ import time
 import os
 from datetime import datetime
 import json
+print("🔥 SCRIPT STARTED")
 from dotenv import load_dotenv
-
 load_dotenv()
 
 # =========================
@@ -356,9 +356,7 @@ Corners: {stats['corners']}
 # START
 # =========================
 if __name__ == "__main__":
-    while True:
-        try:
-            run()
-        except Exception as e:
-            print("🔥 Restarting after error:", e)
-            time.sleep(10)
+    try:
+        run()
+    except Exception as e:
+        print("🔥 Fatal error:", e)
