@@ -361,9 +361,9 @@ def generate_performance_report():
 
                     # DAILY FILTER (optional future upgrade: store date)
                     if r.get("date") == datetime.now().strftime("%Y-%m-%d"):
-                    today_total += 1
-                    if r["result"] == "✅ WIN":
-                        today_wins += 1
+                        today_total += 1
+                        if r["result"] == "✅ WIN":
+                            today_wins += 1
 
                 except:
                     continue
@@ -472,7 +472,7 @@ def check_finished_matches():
             save_result_to_file(result_data)
             save_result_to_csv(result_data)
 
-            logging.info(f"✅ RESULT → {data['teams']} | {result} | {final_home}-{final_away}")
+            logging.info(f"🚀 SIGNAL → {home} vs {away} | min:{minute} | value:{value}")
 
             send_telegram(f"""
 📊 RESULT UPDATE
@@ -686,11 +686,6 @@ Corners: {stats['corners']}
                         del tracked_matches[match_id]
                         save_tracked()
                         save_signals()
-
-                        logging.info(
-                            f"⛔ SKIPPED → {home} vs {away} | "
-                            f"book:{book_odds} fair:{fair_odds} value:{value}"
-                        )
 
                 except Exception as e:
                     logging.error(f"Match error: {e}")
