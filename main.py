@@ -472,7 +472,11 @@ def check_finished_matches():
             save_result_to_file(result_data)
             save_result_to_csv(result_data)
 
-            logging.info(f"🚀 SIGNAL → {home} vs {away} | min:{minute} | value:{value}")
+            logging.info(
+                f"📊 RESULT → {data['teams']} | "
+                f"{data['initial_score']} → {final_home}-{final_away} | {result} | "
+                f"⏱ {data.get('signal_minute')}’ | 💰 {data.get('value')}%"
+            )
 
             send_telegram(f"""
 📊 RESULT UPDATE
