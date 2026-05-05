@@ -360,6 +360,7 @@ def generate_performance_report():
                         tiers[tier]["wins"] += 1
 
                     # DAILY FILTER (optional future upgrade: store date)
+                    if r.get("date") == datetime.now().strftime("%Y-%m-%d"):
                     today_total += 1
                     if r["result"] == "✅ WIN":
                         today_wins += 1
@@ -447,6 +448,7 @@ def check_finished_matches():
                 "track_minute": data.get("track_minute"),
                 "signal_minute": data.get("signal_minute"),
                 "signal_time": data.get("signal_time"),
+                "date": datetime.now().strftime("%Y-%m-%d"),
                 
                 # STATS
                 "track_stats": data.get("track_stats"),
@@ -571,7 +573,7 @@ def run():
                             continue
 
                         # =========================
-                        # NEW SCORING ENGINE
+                        # IMPROVED SCORING ENGINE
                         # =========================
                         score = 40
                         
@@ -585,16 +587,22 @@ def run():
                         elif stats["shots"] >= 9:
                             score += 10
                         
-                        # shots on target = key signal
-                        if stats["sot"] >= 5:
-                            score += 20
-                        elif stats["sot"] >= 3:
+                        # shots on target = KEY FILTER (more strict)
+                        if stats["sot"] >= 6:
+                            score += 25
+                        elif stats["sot"] >= 4:
                             score += 10
                         
-                        # momentum boost
+                        # momentum boost (stronger)
                         delta_shots = stats["shots"] - first["track_stats"]["shots"]
-                        if delta_shots >= 4:
-                            score += 10
+                        if delta_shots >= 5:
+                            score += 15
+                        elif delta_shots >= 3:
+                            score += 8
+                        
+                        # ❌ BAD PRESSURE FILTER (very important)
+                        if stats["shots"] >= 12 and stats["sot"] <= 2:
+                            score -= 15
 
                         tier = classify(score)
 
@@ -679,7 +687,10 @@ Corners: {stats['corners']}
                         save_tracked()
                         save_signals()
 
-                        logging.info(f"🚀 SIGNAL → {home} vs {away} | min:{minute}")
+                        logging.info(
+                            f"⛔ SKIPPED → {home} vs {away} | "
+                            f"book:{book_odds} fair:{fair_odds} value:{value}"
+                        )
 
                 except Exception as e:
                     logging.error(f"Match error: {e}")
