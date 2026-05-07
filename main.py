@@ -238,6 +238,7 @@ def save_result_to_csv(data):
                 "match",
                 "result",
                 "signal_tier",
+                "signal_type",
                 "model_score",
 
                 # 🔥 ODDS + VALUE
@@ -281,6 +282,7 @@ def save_result_to_csv(data):
                 "match": data.get("match"),
                 "result": data.get("result"),
                 "signal_tier": data.get("signal_tier"),
+                "signal_type": data.get("signal_type"),
                 "model_score": data.get("model_score"),
 
                 # 🔥 NEW DATA
@@ -458,6 +460,7 @@ def check_finished_matches():
                 # MODEL
                 "model_score": data.get("model_score"),
                 "signal_tier": data.get("signal_tier"),
+                "signal_type": data.get("signal_type"),
             
                 # ODDS + VALUE
                 "book_odds": data.get("book_odds"),
@@ -715,6 +718,7 @@ Corners: {stats['corners']}
                             # MODEL
                             "model_score": score,
                             "signal_tier": tier,
+                            "signal_type": "CONFIRMED",
                         
                             # ODDS + VALUE
                             "book_odds": book_odds,
