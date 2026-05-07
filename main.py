@@ -601,10 +601,10 @@ def run():
                         )
                         
                         if stats["shots"] <= first["track_stats"]["shots"]:
-                        logging.info(
-                            f"SKIP MOMENTUM → {home} vs {away} | "
-                            f"{stats['shots']} <= {first['track_stats']['shots']}"
-                        )
+                            logging.info(
+                                f"SKIP MOMENTUM → {home} vs {away} | "
+                                f"{stats['shots']} <= {first['track_stats']['shots']}"
+                            )
                         continue
 
                         if stats["sot"] < 2:
