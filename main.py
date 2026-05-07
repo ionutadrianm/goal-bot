@@ -548,7 +548,29 @@ def run():
                     if 30 <= minute <= 45:
 
                         if match_id not in tracked_matches:
+                            logging.info(
+                                f"TRACK CHECK → {home} vs {away} | "
+                                f"min:{minute} | shots:{stats['shots']} | "
+                                f"sot:{stats['sot']} | corners:{stats['corners']}"
+                            )
                             if stats["shots"] >= 5:
+                                early_signal = False
+
+                                if (
+                                    stats["shots"] >= 8 and
+                                    stats["sot"] >= 4 and
+                                    stats["corners"] >= 5
+                                ):
+                                    early_signal = True
+
+                                if early_signal and match_id not in seen_matches:
+                                logging.info(
+                                    f"🔥 EARLY HT SIGNAL → {home} vs {away} | "
+                                    f"shots:{stats['shots']} | "
+                                    f"sot:{stats['sot']} | "
+                                    f"corners:{stats['corners']}"
+                                )
+    
                                 tracked_matches[match_id] = {
                                     "teams": f"{home} vs {away}",
                                     "track_minute": minute,
@@ -567,14 +589,30 @@ def run():
 
                         if match_id in seen_matches:
                             continue
-
+                     
                         first = tracked_matches[match_id]
 
+                        logging.info(
+                            f"CONFIRM CHECK → {home} vs {away} | "
+                            f"min:{minute} | "
+                            f"shots:{stats['shots']}->{first['track_stats']['shots']} | "
+                            f"sot:{stats['sot']} | "
+                            f"score:{home_goals}-{away_goals}"
+                        )
+                        
                         if stats["shots"] <= first["track_stats"]["shots"]:
-                            continue
+                        logging.info(
+                            f"SKIP MOMENTUM → {home} vs {away} | "
+                            f"{stats['shots']} <= {first['track_stats']['shots']}"
+                        )
+                        continue
 
                         if stats["sot"] < 2:
-                            continue
+                        logging.info(
+                            f"SKIP SOT → {home} vs {away} | "
+                            f"min:{minute} | sot:{stats['sot']}"
+                        )
+                        continue
 
                         # =========================
                         # IMPROVED SCORING ENGINE
