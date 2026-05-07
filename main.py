@@ -608,10 +608,10 @@ def run():
                         continue
 
                         if stats["sot"] < 2:
-                        logging.info(
-                            f"SKIP SOT → {home} vs {away} | "
-                            f"min:{minute} | sot:{stats['sot']}"
-                        )
+                            logging.info(
+                                f"SKIP SOT → {home} vs {away} | "
+                                f"min:{minute} | sot:{stats['sot']}"
+                            )
                         continue
 
                         # =========================
