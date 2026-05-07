@@ -564,12 +564,12 @@ def run():
                                     early_signal = True
 
                                 if early_signal and match_id not in seen_matches:
-                                logging.info(
-                                    f"🔥 EARLY HT SIGNAL → {home} vs {away} | "
-                                    f"shots:{stats['shots']} | "
-                                    f"sot:{stats['sot']} | "
-                                    f"corners:{stats['corners']}"
-                                )
+                                    logging.info(
+                                        f"🔥 EARLY HT SIGNAL → {home} vs {away} | "
+                                        f"shots:{stats['shots']} | "
+                                        f"sot:{stats['sot']} | "
+                                        f"corners:{stats['corners']}"
+                                    )
     
                                 tracked_matches[match_id] = {
                                     "teams": f"{home} vs {away}",
