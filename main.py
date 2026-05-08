@@ -672,8 +672,9 @@ def run():
 
                         if value is None or value < 2:
                             logging.info(
-                                f"⛔ SKIPPED → {home} vs {away} | "
-                                f"book:{book_odds} fair:{fair_odds} value:{value}"
+                                f"⛔ SKIPPED → {home} vs {away}\n"
+                                f"book:{book_odds} | fair:{fair_odds} | value:{value}\n"
+                                f"MODEL DEBUG → prob:{round(prob*100)}%"
                             )
                             continue
 
