@@ -608,14 +608,14 @@ def run():
                                 f"SKIP MOMENTUM → {home} vs {away} | "
                                 f"{stats['shots']} <= {first['track_stats']['shots']}"
                             )
-                        continue
-
+                            continue
+                        
                         if stats["sot"] < 2:
                             logging.info(
                                 f"SKIP SOT → {home} vs {away} | "
                                 f"min:{minute} | sot:{stats['sot']}"
                             )
-                        continue
+                            continue
 
                         # =========================
                         # IMPROVED SCORING ENGINE
