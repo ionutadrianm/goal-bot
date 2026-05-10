@@ -114,29 +114,65 @@ def get_live_matches():
         logging.error(f"Live matches error: {e}")
         return []
 
+# =========================
+# SPLIT STATS
+# =========================
 def get_stats(fixture_id):
     try:
-        r = requests.get(f"{BASE_URL}/fixtures/statistics?fixture={fixture_id}", headers=HEADERS)
+        r = requests.get(
+            f"{BASE_URL}/fixtures/statistics?fixture={fixture_id}",
+            headers=HEADERS
+        )
+
         data = r.json().get("response", [])
 
-        if not data:
+        if len(data) < 2:
             return None
 
-        stats = {"shots": 0, "sot": 0, "corners": 0}
+        stats = {
+            "home_shots": 0,
+            "away_shots": 0,
 
-        for team in data:
+            "home_sot": 0,
+            "away_sot": 0,
+
+            "home_corners": 0,
+            "away_corners": 0,
+        }
+
+        for idx, team in enumerate(data):
+
+            side = "home" if idx == 0 else "away"
+
             for s in team.get("statistics", []):
+
                 try:
                     val = int(s.get("value") or 0)
                 except:
                     val = 0
 
                 if s["type"] == "Total Shots":
-                    stats["shots"] += val
+                    stats[f"{side}_shots"] = val
+
                 elif s["type"] == "Shots on Goal":
-                    stats["sot"] += val
+                    stats[f"{side}_sot"] = val
+
                 elif s["type"] == "Corner Kicks":
-                    stats["corners"] += val
+                    stats[f"{side}_corners"] = val
+
+        # TOTALS
+        stats["shots"] = stats["home_shots"] + stats["away_shots"]
+        stats["sot"] = stats["home_sot"] + stats["away_sot"]
+        stats["corners"] = stats["home_corners"] + stats["away_corners"]
+
+        # ACCURACY
+        stats["home_accuracy"] = round(
+            stats["home_sot"] / stats["home_shots"], 2
+        ) if stats["home_shots"] > 0 else 0
+
+        stats["away_accuracy"] = round(
+            stats["away_sot"] / stats["away_shots"], 2
+        ) if stats["away_shots"] > 0 else 0
 
         return stats
 
@@ -144,6 +180,9 @@ def get_stats(fixture_id):
         logging.error(f"Stats error: {e}")
         return None
 
+# =========================
+# LIVE ODDS
+# =========================
 def get_odds(fixture_id):
     try:
         r = requests.get(f"{BASE_URL}/odds?fixture={fixture_id}", headers=HEADERS)
@@ -163,6 +202,77 @@ def get_odds(fixture_id):
         logging.error(f"Odds error: {e}")
         return None
 
+# =========================
+# PREMATCH ODDS
+# =========================
+def get_prematch_odds(fixture_id):
+
+    result = {
+        "home_win_odds": None,
+        "draw_odds": None,
+        "away_win_odds": None,
+
+        "prematch_over_1_5": None,
+        "prematch_over_2_5": None,
+        "prematch_over_3_5": None
+    }
+
+    try:
+        r = requests.get(
+            f"{BASE_URL}/odds?fixture={fixture_id}",
+            headers=HEADERS
+        )
+
+        data = r.json().get("response", [])
+
+        if not data:
+            return result
+
+        bookmakers = data[0].get("bookmakers", [])
+
+        for book in bookmakers:
+
+            for bet in book.get("bets", []):
+
+                # 1X2
+                if bet["name"] == "Match Winner":
+
+                    for v in bet["values"]:
+
+                        if v["value"] == "Home":
+                            result["home_win_odds"] = float(v["odd"])
+
+                        elif v["value"] == "Draw":
+                            result["draw_odds"] = float(v["odd"])
+
+                        elif v["value"] == "Away":
+                            result["away_win_odds"] = float(v["odd"])
+
+                # OVER/UNDER
+                elif bet["name"] == "Goals Over/Under":
+
+                    for v in bet["values"]:
+
+                        try:
+                            val = v["value"]
+
+                            if val == "Over 1.5":
+                                result["prematch_over_1_5"] = float(v["odd"])
+
+                            elif val == "Over 2.5":
+                                result["prematch_over_2_5"] = float(v["odd"])
+
+                            elif val == "Over 3.5":
+                                result["prematch_over_3_5"] = float(v["odd"])
+
+                        except:
+                            continue
+
+        return result
+
+    except Exception as e:
+        logging.error(f"Prematch odds error: {e}")
+        return result
 
 # =========================
 # LOGIC
@@ -176,6 +286,7 @@ def classify(score):
         return "⚡ MEDIUM"
 
 def estimate_probability(stats, delta, minute):
+
     prob = 0.45
 
     if stats["shots"] >= 10:
@@ -193,81 +304,111 @@ def estimate_probability(stats, delta, minute):
     return min(prob, 0.85)
 
 def prob_to_odds(prob):
+
     if prob == 0:
         return None
+
     return round(1 / prob, 2)
 
 def get_target_odds(odds_data, total_goals):
+
     if not odds_data:
         return None
 
     target = float(total_goals) + 1.5
 
     for o in odds_data:
+
         try:
             val = o["value"].replace("Over ", "").strip()
+
             if abs(float(val) - target) < 0.01:
                 return float(o["odd"])
+
         except:
             continue
 
     return None
-    
+
 def calculate_value(book_odds, fair_odds):
+
     try:
         return round(((book_odds / fair_odds) - 1) * 100, 2)
+
     except:
         return None
-        
+
 # =========================
 # SAVE RESULTS
 # =========================
 def save_result_to_file(data):
+
     try:
         with open("results.json", "a") as f:
             f.write(json.dumps(data, default=str) + "\n")
+
     except Exception as e:
         logging.error(f"Save JSON error: {e}")
 
 def save_result_to_csv(data):
+
     try:
+
         file_exists = os.path.isfile(RESULTS_CSV)
 
         with open(RESULTS_CSV, "a", newline="") as f:
+
             writer = csv.DictWriter(f, fieldnames=[
+
                 "match",
                 "result",
+
                 "signal_tier",
                 "signal_type",
+
                 "model_score",
 
-                # 🔥 ODDS + VALUE
                 "book_odds",
                 "fair_odds",
                 "model_prob",
                 "value",
 
-                # SCORES
+                "home_win_odds",
+                "draw_odds",
+                "away_win_odds",
+
+                "prematch_over_1_5",
+                "prematch_over_2_5",
+                "prematch_over_3_5",
+
                 "track_score",
                 "signal_score",
                 "final_score",
 
-                # TIME
                 "track_minute",
                 "signal_minute",
                 "signal_time",
-                
-                # TRACK STATS
+
                 "track_shots",
                 "track_sot",
                 "track_corners",
 
-                # SIGNAL STATS
                 "signal_shots",
                 "signal_sot",
                 "signal_corners",
 
-                # DELTA
+                "home_shots",
+                "away_shots",
+
+                "home_sot",
+                "away_sot",
+
+                "home_corners",
+                "away_corners",
+
+                "home_accuracy",
+                "away_accuracy",
+
                 "delta_shots",
                 "delta_sot",
                 "delta_corners",
@@ -278,40 +419,59 @@ def save_result_to_csv(data):
             if not file_exists:
                 writer.writeheader()
 
+            signal_stats = data.get("signal_stats", {})
+
             writer.writerow({
+
                 "match": data.get("match"),
                 "result": data.get("result"),
+
                 "signal_tier": data.get("signal_tier"),
                 "signal_type": data.get("signal_type"),
+
                 "model_score": data.get("model_score"),
 
-                # 🔥 NEW DATA
                 "book_odds": data.get("book_odds"),
                 "fair_odds": data.get("fair_odds"),
-                "model_prob": round(data.get("model_prob", 0), 3) if data.get("model_prob") else None,
+                "model_prob": data.get("model_prob"),
                 "value": data.get("value"),
 
-                # SCORES
+                "home_win_odds": data.get("home_win_odds"),
+                "draw_odds": data.get("draw_odds"),
+                "away_win_odds": data.get("away_win_odds"),
+
+                "prematch_over_1_5": data.get("prematch_over_1_5"),
+                "prematch_over_2_5": data.get("prematch_over_2_5"),
+                "prematch_over_3_5": data.get("prematch_over_3_5"),
+
                 "track_score": data.get("track_score"),
                 "signal_score": data.get("signal_score"),
                 "final_score": data.get("final_score"),
 
-                # TIME
                 "track_minute": data.get("track_minute"),
                 "signal_minute": data.get("signal_minute"),
                 "signal_time": data.get("signal_time"),
-                
-                # TRACK STATS
+
                 "track_shots": data.get("track_stats", {}).get("shots"),
                 "track_sot": data.get("track_stats", {}).get("sot"),
                 "track_corners": data.get("track_stats", {}).get("corners"),
 
-                # SIGNAL STATS
-                "signal_shots": data.get("signal_stats", {}).get("shots"),
-                "signal_sot": data.get("signal_stats", {}).get("sot"),
-                "signal_corners": data.get("signal_stats", {}).get("corners"),
+                "signal_shots": signal_stats.get("shots"),
+                "signal_sot": signal_stats.get("sot"),
+                "signal_corners": signal_stats.get("corners"),
 
-                # DELTA
+                "home_shots": signal_stats.get("home_shots"),
+                "away_shots": signal_stats.get("away_shots"),
+
+                "home_sot": signal_stats.get("home_sot"),
+                "away_sot": signal_stats.get("away_sot"),
+
+                "home_corners": signal_stats.get("home_corners"),
+                "away_corners": signal_stats.get("away_corners"),
+
+                "home_accuracy": signal_stats.get("home_accuracy"),
+                "away_accuracy": signal_stats.get("away_accuracy"),
+
                 "delta_shots": data.get("delta", {}).get("shots"),
                 "delta_sot": data.get("delta", {}).get("sot"),
                 "delta_corners": data.get("delta", {}).get("corners"),
@@ -322,50 +482,31 @@ def save_result_to_csv(data):
     except Exception as e:
         logging.error(f"CSV save error: {e}")
 
+# =========================
+# PERFORMANCE REPORT
+# =========================
 def generate_performance_report():
+
     try:
+
         if not os.path.exists("results.json"):
-            logging.warning("No results file yet")
             return
 
         total = 0
         wins = 0
 
-        tiers = {
-            "🔥 ELITE": {"total": 0, "wins": 0},
-            "🔥 STRONG": {"total": 0, "wins": 0},
-            "⚡ MEDIUM": {"total": 0, "wins": 0},
-        }
-
-        today = datetime.now().date()
-        today_total = 0
-        today_wins = 0
-
         with open("results.json", "r") as f:
+
             for line in f:
+
                 try:
+
                     r = json.loads(line)
 
                     total += 1
 
                     if r["result"] == "✅ WIN":
                         wins += 1
-
-                    tier = r.get("signal_tier", "⚡ MEDIUM")
-
-                    if tier not in tiers:
-                        tiers[tier] = {"total": 0, "wins": 0}
-
-                    tiers[tier]["total"] += 1
-
-                    if r["result"] == "✅ WIN":
-                        tiers[tier]["wins"] += 1
-
-                    # DAILY FILTER (optional future upgrade: store date)
-                    if r.get("date") == datetime.now().strftime("%Y-%m-%d"):
-                        today_total += 1
-                        if r["result"] == "✅ WIN":
-                            today_wins += 1
 
                 except:
                     continue
@@ -375,48 +516,39 @@ def generate_performance_report():
 
         winrate = round((wins / total) * 100, 2)
 
-        report = f"📊 PERFORMANCE REPORT\n\n"
-        report += f"Total Signals: {total}\n"
-        report += f"Winrate: {winrate}%\n\n"
+        report = f"""
+📊 PERFORMANCE REPORT
 
-        report += "📈 By Tier:\n"
-
-        for tier, data in tiers.items():
-            if data["total"] == 0:
-                continue
-
-            tier_wr = round((data["wins"] / data["total"]) * 100, 2)
-            report += f"{tier}: {data['wins']}/{data['total']} ({tier_wr}%)\n"
-
-        report += "\n📅 Today:\n"
-        if today_total > 0:
-            today_wr = round((today_wins / today_total) * 100, 2)
-            report += f"{today_wins}/{today_total} ({today_wr}%)\n"
-        else:
-            report += "No data yet\n"
+Total Signals: {total}
+Winrate: {winrate}%
+"""
 
         logging.info(report)
 
-        # 🔥 SEND TO TELEGRAM
-        send_telegram(report)
-
     except Exception as e:
         logging.error(f"Report error: {e}")
-        
+
 # =========================
 # RESULT CHECKER
 # =========================
 def check_finished_matches():
+
     logging.info("📊 Checking results...")
 
     for match_id, data in list(seen_matches.items()):
+
         try:
+
             time_since = (datetime.now() - data["time"]).total_seconds()
 
             if time_since < 2400:
                 continue
 
-            r = requests.get(f"{BASE_URL}/fixtures?id={match_id}", headers=HEADERS)
+            r = requests.get(
+                f"{BASE_URL}/fixtures?id={match_id}",
+                headers=HEADERS
+            )
+
             res = r.json().get("response", [])
 
             if not res:
@@ -424,6 +556,7 @@ def check_finished_matches():
 
             fixture = res[0]["fixture"]
             goals = res[0]["goals"]
+
             status = fixture["status"]["short"]
 
             if status not in ["FT", "AET", "PEN"]:
@@ -432,66 +565,33 @@ def check_finished_matches():
             final_home = goals["home"] or 0
             final_away = goals["away"] or 0
 
-            initial_total = sum(map(int, data["initial_score"].split("-")))
+            initial_total = sum(
+                map(int, data["initial_score"].split("-"))
+            )
+
             final_total = final_home + final_away
 
-            result = "✅ WIN" if final_total >= initial_total + 2 else "❌ LOSS"
+            result = (
+                "✅ WIN"
+                if final_total >= initial_total + 2
+                else "❌ LOSS"
+            )
 
-            result_data = {
-                "match": data["teams"],
-                "result": result,
-            
-                # SCORES
-                "track_score": data.get("track_score"),
-                "signal_score": data.get("signal_score"),
-                "final_score": f"{final_home}-{final_away}",
-            
-                # TIME
-                "track_minute": data.get("track_minute"),
-                "signal_minute": data.get("signal_minute"),
-                "signal_time": data.get("signal_time"),
-                "date": datetime.now().strftime("%Y-%m-%d"),
-                
-                # STATS
-                "track_stats": data.get("track_stats"),
-                "signal_stats": data.get("signal_stats"),
-                "delta": data.get("delta"),
-            
-                # MODEL
-                "model_score": data.get("model_score"),
-                "signal_tier": data.get("signal_tier"),
-                "signal_type": data.get("signal_type"),
-            
-                # ODDS + VALUE
-                "book_odds": data.get("book_odds"),
-                "fair_odds": data.get("fair_odds"),
-                "model_prob": data.get("model_prob"),
-                "value": data.get("value"),
-            
-                # EXTRA
-                "goals_at_signal": data.get("goals_at_signal")
-            }
-            
+            result_data = data.copy()
+
+            result_data["result"] = result
+            result_data["final_score"] = f"{final_home}-{final_away}"
+
             save_result_to_file(result_data)
             save_result_to_csv(result_data)
 
             logging.info(
                 f"📊 RESULT → {data['teams']} | "
-                f"{data['initial_score']} → {final_home}-{final_away} | {result} | "
-                f"⏱ {data.get('signal_minute')}’ | 💰 {data.get('value')}%"
+                f"{result}"
             )
 
-            send_telegram(f"""
-📊 RESULT UPDATE
-
-{data['teams']}
-Result: {result}
-
-Start: {data['initial_score']}
-Final: {final_home}-{final_away}
-""")
-
             del seen_matches[match_id]
+
             save_signals()
 
         except Exception as e:
@@ -501,30 +601,35 @@ Final: {final_home}-{final_away}
 # MAIN LOOP
 # =========================
 def run():
+
     global last_result_check
 
     logging.info("🚀 PRO SCANNER RUNNING")
 
     while True:
+
         try:
+
             logging.info("🔁 NEW SCAN")
 
             matches = get_live_matches()
 
             if not matches:
-                logging.warning("⚠️ No live matches")
                 time.sleep(60)
                 continue
 
             logging.info(f"📊 Matches: {len(matches)}")
 
             for m in matches[:80]:
+
                 try:
+
                     fixture = m["fixture"]
                     teams = m["teams"]
                     goals = m["goals"]
 
                     match_id = fixture["id"]
+
                     minute = fixture["status"]["elapsed"]
 
                     if not minute:
@@ -538,53 +643,65 @@ def run():
 
                     home_goals = goals["home"] or 0
                     away_goals = goals["away"] or 0
+
                     total = home_goals + away_goals
 
                     if total >= 3:
                         continue
 
                     stats = get_stats(match_id)
+
                     if stats is None:
                         continue
 
+                    # =========================
                     # TRACK
+                    # =========================
                     if 30 <= minute <= 45:
 
                         if match_id not in tracked_matches:
+
                             logging.info(
                                 f"TRACK CHECK → {home} vs {away} | "
-                                f"min:{minute} | shots:{stats['shots']} | "
-                                f"sot:{stats['sot']} | corners:{stats['corners']}"
+                                f"shots:{stats['shots']} | "
+                                f"sot:{stats['sot']} | "
+                                f"corners:{stats['corners']}"
                             )
+
                             if stats["shots"] >= 5:
-                                early_signal = False
 
-                                if (
-                                    stats["shots"] >= 8 and
-                                    stats["sot"] >= 4 and
-                                    stats["corners"] >= 5
-                                ):
-                                    early_signal = True
+                                prematch = get_prematch_odds(match_id)
 
-                                if early_signal and match_id not in seen_matches:
-                                    logging.info(
-                                        f"🔥 EARLY HT SIGNAL → {home} vs {away} | "
-                                        f"shots:{stats['shots']} | "
-                                        f"sot:{stats['sot']} | "
-                                        f"corners:{stats['corners']}"
-                                    )
-    
                                 tracked_matches[match_id] = {
+
                                     "teams": f"{home} vs {away}",
+
                                     "track_minute": minute,
                                     "track_stats": stats,
-                                    "score": f"{home_goals}-{away_goals}",
-                                    "time": datetime.now()
-                                }
-                                save_tracked()
-                                logging.info(f"🧠 TRACKED → {home} vs {away} | min:{minute}")
 
+                                    "score": f"{home_goals}-{away_goals}",
+
+                                    "time": datetime.now(),
+
+                                    # PREMATCH
+                                    "home_win_odds": prematch["home_win_odds"],
+                                    "draw_odds": prematch["draw_odds"],
+                                    "away_win_odds": prematch["away_win_odds"],
+
+                                    "prematch_over_1_5": prematch["prematch_over_1_5"],
+                                    "prematch_over_2_5": prematch["prematch_over_2_5"],
+                                    "prematch_over_3_5": prematch["prematch_over_3_5"]
+                                }
+
+                                save_tracked()
+
+                                logging.info(
+                                    f"🧠 TRACKED → {home} vs {away}"
+                                )
+
+                    # =========================
                     # CONFIRM
+                    # =========================
                     if 50 <= minute <= 65:
 
                         if match_id not in tracked_matches:
@@ -592,145 +709,200 @@ def run():
 
                         if match_id in seen_matches:
                             continue
-                     
+
                         first = tracked_matches[match_id]
 
                         logging.info(
                             f"CONFIRM CHECK → {home} vs {away} | "
-                            f"min:{minute} | "
-                            f"shots:{stats['shots']}->{first['track_stats']['shots']} | "
+                            f"shots:{stats['shots']} | "
                             f"sot:{stats['sot']} | "
-                            f"score:{home_goals}-{away_goals}"
+                            f"corners:{stats['corners']}"
                         )
-                        
+
+                        # MOMENTUM
                         if stats["shots"] <= first["track_stats"]["shots"]:
-                            logging.info(
-                                f"SKIP MOMENTUM → {home} vs {away} | "
-                                f"{stats['shots']} <= {first['track_stats']['shots']}"
-                            )
                             continue
-                        
-                        if stats["sot"] < 2:
+
+                        # SMALL FILTER 1
+                        if stats["corners"] < 4:
+
                             logging.info(
-                                f"SKIP SOT → {home} vs {away} | "
-                                f"min:{minute} | sot:{stats['sot']}"
+                                f"SKIP LOW CORNERS → "
+                                f"{home} vs {away}"
                             )
+
+                            continue
+
+                        # SMALL FILTER 2
+                        accuracy = (
+                            stats["sot"] / stats["shots"]
+                            if stats["shots"] > 0 else 0
+                        )
+
+                        if stats["shots"] >= 12 and accuracy < 0.20:
+
+                            logging.info(
+                                f"SKIP FAKE PRESSURE → "
+                                f"{home} vs {away} | "
+                                f"accuracy:{round(accuracy,2)}"
+                            )
+
+                            continue
+
+                        # ORIGINAL SOT FILTER
+                        if stats["sot"] < 2:
                             continue
 
                         # =========================
-                        # IMPROVED SCORING ENGINE
+                        # SCORING
                         # =========================
                         score = 40
-                        
-                        # draw = strong factor
+
                         if home_goals == away_goals:
                             score += 20
-                        
-                        # shots pressure
+
                         if stats["shots"] >= 12:
                             score += 15
                         elif stats["shots"] >= 9:
                             score += 10
-                        
-                        # shots on target = KEY FILTER (more strict)
+
                         if stats["sot"] >= 6:
                             score += 25
                         elif stats["sot"] >= 4:
                             score += 10
-                        
-                        # momentum boost (stronger)
-                        delta_shots = stats["shots"] - first["track_stats"]["shots"]
+
+                        delta_shots = (
+                            stats["shots"]
+                            - first["track_stats"]["shots"]
+                        )
+
                         if delta_shots >= 5:
                             score += 15
                         elif delta_shots >= 3:
                             score += 8
-                        
-                        # ❌ BAD PRESSURE FILTER (very important)
+
                         if stats["shots"] >= 12 and stats["sot"] <= 2:
                             score -= 15
 
                         tier = classify(score)
 
                         # =========================
-                        # ODDS + VALUE SYSTEM
+                        # ODDS
                         # =========================
                         odds_data = get_odds(match_id)
-                        
-                        book_odds = get_target_odds(odds_data, total)
-                        logging.info(f"ODDS DEBUG → {home} vs {away} | odds_data={odds_data} | book_odds={book_odds}")
-                        
+
+                        book_odds = get_target_odds(
+                            odds_data,
+                            total
+                        )
+
                         delta = {
                             "shots": stats["shots"] - first["track_stats"]["shots"],
                             "sot": stats["sot"] - first["track_stats"]["sot"],
                             "corners": stats["corners"] - first["track_stats"]["corners"]
                         }
-                        
-                        prob = estimate_probability(stats, delta, minute)
+
+                        prob = estimate_probability(
+                            stats,
+                            delta,
+                            minute
+                        )
+
                         fair_odds = prob_to_odds(prob)
-                        
-                        value = calculate_value(book_odds, fair_odds) if book_odds else None
+
+                        value = calculate_value(
+                            book_odds,
+                            fair_odds
+                        ) if book_odds else None
 
                         if value is None or value < 2:
+
                             logging.info(
                                 f"⛔ SKIPPED → {home} vs {away}\n"
-                                f"book:{book_odds} | fair:{fair_odds} | value:{value}\n"
-                                f"MODEL DEBUG → prob:{round(prob*100)}%"
+                                f"book:{book_odds} | "
+                                f"fair:{fair_odds} | "
+                                f"value:{value}"
                             )
+
                             continue
 
-                        send_telegram(f"""{tier} VALUE SIGNAL
+                        # =========================
+                        # TELEGRAM
+                        # =========================
+                        send_telegram(f"""
+{tier} VALUE SIGNAL
 
 {home} vs {away}
+
 Min: {minute}'
 Score: {home_goals}-{away_goals}
 
 🎯 Market: Over {total + 1.5}
+
 💰 Book Odds: {book_odds}
 🧠 Fair Odds: {fair_odds}
+
 📊 Model Prob: {round(prob*100)}%
 🔥 Value: {value}%
 
-Shots: {stats['shots']}
-SOT: {stats['sot']}
-Corners: {stats['corners']}
+⚽ Shots:
+{stats['home_shots']} - {stats['away_shots']}
+
+🎯 SOT:
+{stats['home_sot']} - {stats['away_sot']}
+
+🚩 Corners:
+{stats['home_corners']} - {stats['away_corners']}
 """)
 
+                        # =========================
+                        # SAVE SIGNAL
+                        # =========================
                         seen_matches[match_id] = {
+
                             "time": datetime.now(),
+
                             "teams": f"{home} vs {away}",
-                        
-                            # SCORES
+
                             "track_score": first["score"],
                             "signal_score": f"{home_goals}-{away_goals}",
+
                             "initial_score": f"{home_goals}-{away_goals}",
-                        
-                            # TIME
+
                             "track_minute": first["track_minute"],
                             "signal_minute": minute,
+
                             "signal_time": datetime.now().isoformat(),
-                            
-                            # STATS
+
                             "track_stats": first["track_stats"],
                             "signal_stats": stats,
-                        
-                            # MOMENTUM
+
                             "delta": delta,
-                        
-                            # MODEL
+
                             "model_score": score,
+
                             "signal_tier": tier,
                             "signal_type": "CONFIRMED",
-                        
-                            # ODDS + VALUE
+
                             "book_odds": book_odds,
                             "fair_odds": fair_odds,
                             "model_prob": prob,
                             "value": value,
-                        
-                            # EXTRA
+
+                            # PREMATCH
+                            "home_win_odds": first.get("home_win_odds"),
+                            "draw_odds": first.get("draw_odds"),
+                            "away_win_odds": first.get("away_win_odds"),
+
+                            "prematch_over_1_5": first.get("prematch_over_1_5"),
+                            "prematch_over_2_5": first.get("prematch_over_2_5"),
+                            "prematch_over_3_5": first.get("prematch_over_3_5"),
+
                             "goals_at_signal": total
                         }
+
                         del tracked_matches[match_id]
+
                         save_tracked()
                         save_signals()
 
@@ -739,40 +911,53 @@ Corners: {stats['corners']}
 
             current_time = time.time()
 
-            if seen_matches and current_time - last_result_check > 1800:
+            if (
+                seen_matches
+                and current_time - last_result_check > 1800
+            ):
+
                 check_finished_matches()
-                generate_performance_report()   # 👈 ADD THIS
+
+                generate_performance_report()
+
                 last_result_check = current_time
 
-            # =========================
-            # CLEANUP OLD TRACKED MATCHES
-            # =========================
-            # CLEANUP OLD TRACKED MATCHES
+            # CLEANUP
             now = datetime.now()
-            
+
             for mid, t in list(tracked_matches.items()):
+
                 try:
-                    age = (now - datetime.fromisoformat(t["time"]) if isinstance(t["time"], str) else now - t["time"]).total_seconds()
-            
-                    if age > 3600:  # 1 hour
+
+                    age = (
+                        now - datetime.fromisoformat(t["time"])
+                        if isinstance(t["time"], str)
+                        else now - t["time"]
+                    ).total_seconds()
+
+                    if age > 3600:
                         del tracked_matches[mid]
+
                 except:
                     del tracked_matches[mid]
-            
-            save_tracked()
 
+            save_tracked()
             save_signals()
 
             time.sleep(300)
 
         except Exception as e:
+
             logging.error(f"LOOP ERROR: {e}")
+
             time.sleep(60)
 
 # =========================
 # START
 # =========================
 if __name__ == "__main__":
+
     load_signals()
-    load_tracked()   # ✅ ADD THIS
+    load_tracked()
+
     run()
