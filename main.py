@@ -365,6 +365,7 @@ def save_result_to_csv(data):
 
                 "signal_tier",
                 "signal_type",
+                "signal_tags",
 
                 "model_score",
 
@@ -428,6 +429,7 @@ def save_result_to_csv(data):
 
                 "signal_tier": data.get("signal_tier"),
                 "signal_type": data.get("signal_type"),
+                "signal_tags": ",".join(data.get("signal_tags", [])),
 
                 "model_score": data.get("model_score"),
 
@@ -657,7 +659,7 @@ def run():
                     # =========================
                     # TRACK
                     # =========================
-                    if 30 <= minute <= 45:
+                    if 35 <= minute <= 45:
 
                         if match_id not in tracked_matches:
 
@@ -672,6 +674,28 @@ def run():
 
                                 prematch = get_prematch_odds(match_id)
 
+                                favorite = "NONE"
+
+                                if prematch:
+                                
+                                    home_odds = prematch.get("home_win_odds")
+                                    away_odds = prematch.get("away_win_odds")
+                                
+                                    if home_odds and away_odds:
+                                
+                                        if home_odds <= 1.80:
+                                            favorite = "HOME"
+                                
+                                        elif away_odds <= 1.80:
+                                            favorite = "AWAY"
+                                
+                                logging.info(
+                                    f"FAVORITE → {favorite} | "
+                                    f"home:{prematch.get('home_win_odds')} | "
+                                    f"draw:{prematch.get('draw_odds')} | "
+                                    f"away:{prematch.get('away_win_odds')}"
+                                )
+
                                 tracked_matches[match_id] = {
 
                                     "teams": f"{home} vs {away}",
@@ -683,6 +707,8 @@ def run():
 
                                     "time": datetime.now(),
 
+                                    "favorite": favorite,
+                                    
                                     # PREMATCH
                                     "home_win_odds": prematch["home_win_odds"],
                                     "draw_odds": prematch["draw_odds"],
@@ -702,7 +728,7 @@ def run():
                     # =========================
                     # CONFIRM
                     # =========================
-                    if 50 <= minute <= 65:
+                    if 50 <= minute <= 60:
 
                         if match_id not in tracked_matches:
                             continue
@@ -787,6 +813,72 @@ def run():
                         tier = classify(score)
 
                         # =========================
+                        # PRESSURE SPLIT
+                        # =========================
+                        home_pressure = (
+                            stats["home_shots"] +
+                            (stats["home_sot"] * 2) +
+                            stats["home_corners"]
+                        )
+                        
+                        away_pressure = (
+                            stats["away_shots"] +
+                            (stats["away_sot"] * 2) +
+                            stats["away_corners"]
+                        )
+                        
+                        total_pressure = home_pressure + away_pressure
+                        
+                        home_pressure_pct = round((home_pressure / total_pressure) * 100, 1) if total_pressure > 0 else 50
+                        away_pressure_pct = round((away_pressure / total_pressure) * 100, 1) if total_pressure > 0 else 50
+                        
+                        logging.info(
+                            f"PRESSURE SPLIT → "
+                            f"{home}:{home_pressure_pct}% | "
+                            f"{away}:{away_pressure_pct}%"
+                        )
+                        
+                        signal_tags = []
+
+                        # =========================
+                        # WOUNDED FAVORITE
+                        # =========================
+                        if first.get("favorite") == "HOME" and home_goals <= away_goals:
+                            signal_tags.append("WOUNDED_HOME_FAVORITE")
+                        
+                        if first.get("favorite") == "AWAY" and away_goals <= home_goals:
+                            signal_tags.append("WOUNDED_AWAY_FAVORITE")
+                        
+                        # =========================
+                        # DOMINANT PRESSURE
+                        # =========================
+                        if home_pressure_pct >= 70:
+                            signal_tags.append("HOME_SIEGE")
+                        
+                        if away_pressure_pct >= 70:
+                            signal_tags.append("AWAY_SIEGE")
+                        
+                        # =========================
+                        # END TO END
+                        # =========================
+                        if (
+                            stats["home_sot"] >= 2 and
+                            stats["away_sot"] >= 2
+                        ):
+                            signal_tags.append("END_TO_END")
+                        
+                        # =========================
+                        # CORNER PRESSURE
+                        # =========================
+                        if stats["corners"] >= 10:
+                            signal_tags.append("HIGH_CORNERS")
+
+                        logging.info(
+                            f"SIGNAL TAGS → "
+                            f"{', '.join(signal_tags) if signal_tags else 'NONE'}"
+                        )
+                        
+                        # =========================
                         # ODDS
                         # =========================
                         odds_data = get_odds(match_id)
@@ -853,6 +945,9 @@ Score: {home_goals}-{away_goals}
 
 🚩 Corners:
 {stats['home_corners']} - {stats['away_corners']}
+
+🏷 Tags:
+{', '.join(signal_tags) if signal_tags else 'NONE'}
 """)
 
                         # =========================
@@ -877,6 +972,8 @@ Score: {home_goals}-{away_goals}
                             "track_stats": first["track_stats"],
                             "signal_stats": stats,
 
+                            "signal_tags": signal_tags,
+                            
                             "delta": delta,
 
                             "model_score": score,
