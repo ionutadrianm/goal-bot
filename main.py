@@ -417,11 +417,12 @@ def save_result_to_csv(data):
                 "delta_sot",
                 "delta_corners",
 
-                "goals_at_signal"
+                "goals_at_signal",
                 "profit_sim",
                 "home_pressure_pct",
                 "away_pressure_pct",
                 "minute_bucket",
+                "closing_odds",
             ])
 
             if not file_exists:
@@ -710,33 +711,6 @@ Signals: {total}
 # =========================
 def send_daily_summary():
 
-    today = datetime.now().strftime("%Y-%m-%d")
-
-    report = f"""
-📅 DAILY SUMMARY
-
-Date: {today}
-
-Bot active and tracking signals.
-Check performance report for:
-• ROI
-• Winrate
-• Tag performance
-• Minute performance
-"""
-
-    logging.info(report)
-
-    send_telegram(report)
-
-# =========================
-# RESULT CHECKER
-# =========================
-# =========================
-# DAILY SUMMARY
-# =========================
-def send_daily_summary():
-
     try:
 
         if not os.path.exists("results.json"):
@@ -806,11 +780,118 @@ Signals: {total}
         logging.error(f"Daily summary error: {e}")
 
 # =========================
+# RESULT CHECKER
+# =========================
+def check_finished_matches():
+
+    logging.info("📊 Checking results...")
+
+    for match_id, data in list(seen_matches.items()):
+
+        try:
+
+            time_since = (
+                datetime.now() - data["time"]
+            ).total_seconds()
+
+            if time_since < 2400:
+                continue
+
+            r = requests.get(
+                f"{BASE_URL}/fixtures?id={match_id}",
+                headers=HEADERS
+            )
+
+            res = r.json().get("response", [])
+
+            if not res:
+                continue
+
+            fixture = res[0]["fixture"]
+            goals = res[0]["goals"]
+
+            status = fixture["status"]["short"]
+
+            if status not in ["FT", "AET", "PEN"]:
+                continue
+
+            final_home = goals["home"] or 0
+            final_away = goals["away"] or 0
+
+            initial_total = sum(
+                map(int, data["initial_score"].split("-"))
+            )
+
+            final_total = final_home + final_away
+
+            extra_goals = final_total - initial_total
+
+            if extra_goals >= 2:
+
+                result = "✅ WIN"
+
+                profit_sim = round(
+                    data.get("book_odds", 0) - 1,
+                    2
+                )
+
+            elif extra_goals == 1:
+
+                result = "🤝 PUSH"
+
+                profit_sim = 0
+
+            else:
+
+                result = "❌ LOSS"
+
+                profit_sim = -1
+
+            result_data = data.copy()
+
+            result_data["result"] = result
+
+            result_data["profit_sim"] = profit_sim
+
+            result_data["final_score"] = (
+                f"{final_home}-{final_away}"
+            )
+
+            # =========================
+            # CLOSING ODDS
+            # =========================
+            closing_odds_data = get_odds(match_id)
+
+            closing_odds = get_target_odds(
+                closing_odds_data,
+                initial_total
+            )
+
+            result_data["closing_odds"] = closing_odds
+
+            save_result_to_file(result_data)
+
+            save_result_to_csv(result_data)
+
+            logging.info(
+                f"📊 RESULT → {data['teams']} | {result}"
+            )
+
+            del seen_matches[match_id]
+
+            save_signals()
+
+        except Exception as e:
+
+            logging.error(f"Result error: {e}")
+
+
+# =========================
 # MAIN LOOP
 # =========================
 def run():
-
     global last_result_check
+    global last_daily_report
 
     logging.info("🚀 PRO SCANNER RUNNING")
 
@@ -1206,16 +1287,6 @@ Score: {home_goals}-{away_goals}
                             "prematch_over_1_5": first.get("prematch_over_1_5"),
                             "prematch_over_2_5": first.get("prematch_over_2_5"),
                             "prematch_over_3_5": first.get("prematch_over_3_5"),
-
-                            "home_pressure_pct": home_pressure_pct,
-                            "away_pressure_pct": away_pressure_pct,
-                            
-                            "closing_odds": None,
-                            
-                            "profit_sim": 0,
-                            
-                            "minute_bucket":
-                                "50-55" if minute <= 55 else "56-60",
                             
                             "goals_at_signal": total
                         }
