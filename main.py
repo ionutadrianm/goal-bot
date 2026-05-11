@@ -1008,10 +1008,7 @@ Score: {home_goals}-{away_goals}
 
             current_time = time.time()
 
-            if (
-                seen_matches
-                and current_time - last_result_check > 1800
-            ):
+            if current_time - last_result_check > 1800:
 
                 check_finished_matches()
 
