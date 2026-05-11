@@ -704,7 +704,6 @@ Signals: {total}
 
     except Exception as e:
         logging.error(f"Report error: {e}")
-```
 
 # =========================
 # DAILY SUMMARY
