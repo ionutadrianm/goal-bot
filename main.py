@@ -45,10 +45,13 @@ HEADERS = {
 seen_matches = {}
 tracked_matches = {}
 last_result_check = 0
+last_daily_report = None
 
 SIGNALS_FILE = "signals.json"
 TRACKED_FILE = "tracked.json"
 RESULTS_CSV = "results.csv"
+
+
 
 # =========================
 # PERSISTENCE
@@ -415,6 +418,10 @@ def save_result_to_csv(data):
                 "delta_corners",
 
                 "goals_at_signal"
+                "profit_sim",
+                "home_pressure_pct",
+                "away_pressure_pct",
+                "minute_bucket",
             ])
 
             if not file_exists:
@@ -476,9 +483,20 @@ def save_result_to_csv(data):
 
                 "delta_shots": data.get("delta", {}).get("shots"),
                 "delta_sot": data.get("delta", {}).get("sot"),
-                "delta_corners": data.get("delta", {}).get("corners"),
 
-                "goals_at_signal": data.get("goals_at_signal")
+                "delta_corners": data.get("delta", {}).get("corners"),
+                
+                "goals_at_signal": data.get("goals_at_signal"),
+                
+                "profit_sim": data.get("profit_sim"),
+                
+                "home_pressure_pct": data.get("home_pressure_pct"),
+                "away_pressure_pct": data.get("away_pressure_pct"),
+                
+                "minute_bucket": data.get("minute_bucket"),
+                
+                "closing_odds": data.get("closing_odds")
+
             })
 
     except Exception as e:
@@ -495,7 +513,22 @@ def generate_performance_report():
             return
 
         total = 0
+
         wins = 0
+        pushes = 0
+        losses = 0
+
+        total_profit = 0
+
+        elite_total = 0
+        elite_wins = 0
+
+        strong_total = 0
+        strong_wins = 0
+
+        tag_stats = {}
+
+        minute_stats = {}
 
         with open("results.json", "r") as f:
 
@@ -507,8 +540,76 @@ def generate_performance_report():
 
                     total += 1
 
-                    if r["result"] == "✅ WIN":
+                    result = r.get("result")
+
+                    if result == "✅ WIN":
                         wins += 1
+
+                    elif result == "🤝 PUSH":
+                        pushes += 1
+
+                    else:
+                        losses += 1
+
+                    total_profit += r.get("profit_sim", 0)
+
+                    # =====================
+                    # TIERS
+                    # =====================
+
+                    tier = r.get("signal_tier")
+
+                    if tier == "🔥 ELITE":
+
+                        elite_total += 1
+
+                        if result == "✅ WIN":
+                            elite_wins += 1
+
+                    elif tier == "🔥 STRONG":
+
+                        strong_total += 1
+
+                        if result == "✅ WIN":
+                            strong_wins += 1
+
+                    # =====================
+                    # TAGS
+                    # =====================
+
+                    tags = r.get("signal_tags", [])
+
+                    for tag in tags:
+
+                        if tag not in tag_stats:
+
+                            tag_stats[tag] = {
+                                "total": 0,
+                                "wins": 0
+                            }
+
+                        tag_stats[tag]["total"] += 1
+
+                        if result == "✅ WIN":
+                            tag_stats[tag]["wins"] += 1
+
+                    # =====================
+                    # MINUTE BUCKETS
+                    # =====================
+
+                    bucket = r.get("minute_bucket", "UNKNOWN")
+
+                    if bucket not in minute_stats:
+
+                        minute_stats[bucket] = {
+                            "total": 0,
+                            "wins": 0
+                        }
+
+                    minute_stats[bucket]["total"] += 1
+
+                    if result == "✅ WIN":
+                        minute_stats[bucket]["wins"] += 1
 
                 except:
                     continue
@@ -518,17 +619,116 @@ def generate_performance_report():
 
         winrate = round((wins / total) * 100, 2)
 
-        report = f"""
+        non_loss = round(((wins + pushes) / total) * 100, 2)
+
+        roi = round((total_profit / total) * 100, 2)
+
+        elite_wr = (
+            round((elite_wins / elite_total) * 100, 2)
+            if elite_total > 0 else 0
+        )
+
+        strong_wr = (
+            round((strong_wins / strong_total) * 100, 2)
+            if strong_total > 0 else 0
+        )
+
+        # =====================
+        # BEST TAGS
+        # =====================
+
+        tag_lines = []
+
+        for tag, vals in sorted(
+            tag_stats.items(),
+            key=lambda x: x[1]["wins"],
+            reverse=True
+        ):
+
+            if vals["total"] < 3:
+                continue
+
+            wr = round(
+                (vals["wins"] / vals["total"]) * 100,
+                1
+            )
+
+            tag_lines.append(
+                f"{tag}: {wr}% ({vals['total']})"
+            )
+
+        # =====================
+        # MINUTES
+        # =====================
+
+        minute_lines = []
+
+        for bucket, vals in minute_stats.items():
+
+            wr = round(
+                (vals["wins"] / vals["total"]) * 100,
+                1
+            )
+
+            minute_lines.append(
+                f"{bucket}: {wr}%"
+            )
+
+        report = f'''
 📊 PERFORMANCE REPORT
 
-Total Signals: {total}
-Winrate: {winrate}%
-"""
+Signals: {total}
+
+✅ Wins: {wins}
+🤝 Pushes: {pushes}
+❌ Losses: {losses}
+
+🎯 Winrate: {winrate}%
+🛡 Non-Loss: {non_loss}%
+
+💰 ROI: {roi}%
+
+🔥 ELITE WR: {elite_wr}%
+⚡ STRONG WR: {strong_wr}%
+
+🏷 TAG STATS:
+{chr(10).join(tag_lines[:5])}
+
+⏱ MINUTE BUCKETS:
+{chr(10).join(minute_lines)}
+'''
 
         logging.info(report)
+
         send_telegram(report)
+
     except Exception as e:
         logging.error(f"Report error: {e}")
+```
+
+# =========================
+# DAILY SUMMARY
+# =========================
+def send_daily_summary():
+
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    report = f"""
+📅 DAILY SUMMARY
+
+Date: {today}
+
+Bot active and tracking signals.
+Check performance report for:
+• ROI
+• Winrate
+• Tag performance
+• Minute performance
+"""
+
+    logging.info(report)
+
+    send_telegram(report)
 
 # =========================
 # RESULT CHECKER
@@ -573,16 +773,46 @@ def check_finished_matches():
 
             final_total = final_home + final_away
 
-            result = (
-                "✅ WIN"
-                if final_total >= initial_total + 2
-                else "❌ LOSS"
-            )
+            extra_goals = final_total - initial_total
 
-            result_data = data.copy()
+            if extra_goals >= 2:
+            
+                result = "✅ WIN"
+            
+                profit_sim = round(
+                    data.get("book_odds", 0) - 1,
+                    2
+                )
+            
+            elif extra_goals == 1:
+            
+                result = "🤝 PUSH"
+            
+                profit_sim = 0
+            
+            else:
+            
+                result = "❌ LOSS"
+            
+                profit_sim = -1
+            
+            result_data["profit_sim"] = profit
 
             result_data["result"] = result
             result_data["final_score"] = f"{final_home}-{final_away}"
+            result_data["profit_sim"] = profit_sim
+            
+            # =========================
+            # CLOSING ODDS
+            # =========================
+            closing_odds_data = get_odds(match_id)
+            
+            closing_odds = get_target_odds(
+                closing_odds_data,
+                initial_total
+            )
+            
+            result_data["closing_odds"] = closing_odds
 
             save_result_to_file(result_data)
             save_result_to_csv(result_data)
@@ -974,6 +1204,12 @@ Score: {home_goals}-{away_goals}
 
                             "signal_tags": signal_tags,
                             
+                            "home_pressure_pct": home_pressure_pct,
+                            "away_pressure_pct": away_pressure_pct,
+                            
+                            "minute_bucket":
+                                "50-55" if minute <= 55 else "56-60",
+                            
                             "delta": delta,
 
                             "model_score": score,
@@ -995,6 +1231,16 @@ Score: {home_goals}-{away_goals}
                             "prematch_over_2_5": first.get("prematch_over_2_5"),
                             "prematch_over_3_5": first.get("prematch_over_3_5"),
 
+                            "home_pressure_pct": home_pressure_pct,
+                            "away_pressure_pct": away_pressure_pct,
+                            
+                            "closing_odds": None,
+                            
+                            "profit_sim": 0,
+                            
+                            "minute_bucket":
+                                "50-55" if minute <= 55 else "56-60",
+                            
                             "goals_at_signal": total
                         }
 
@@ -1005,6 +1251,16 @@ Score: {home_goals}-{away_goals}
 
                 except Exception as e:
                     logging.error(f"Match error: {e}")
+
+            current_day = datetime.now().strftime("%Y-%m-%d")
+            
+            global last_daily_report
+            
+            if last_daily_report != current_day:
+            
+                send_daily_summary()
+            
+                last_daily_report = current_day
 
             current_time = time.time()
 
