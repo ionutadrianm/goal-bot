@@ -526,7 +526,7 @@ Winrate: {winrate}%
 """
 
         logging.info(report)
-
+        send_telegram(report)
     except Exception as e:
         logging.error(f"Report error: {e}")
 
