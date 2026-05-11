@@ -732,101 +732,78 @@ Check performance report for:
 # =========================
 # RESULT CHECKER
 # =========================
-def check_finished_matches():
+# =========================
+# DAILY SUMMARY
+# =========================
+def send_daily_summary():
 
-    logging.info("📊 Checking results...")
+    try:
 
-    for match_id, data in list(seen_matches.items()):
+        if not os.path.exists("results.json"):
+            return
 
-        try:
+        total = 0
+        wins = 0
+        pushes = 0
+        losses = 0
 
-            time_since = (datetime.now() - data["time"]).total_seconds()
+        today = datetime.now().strftime("%Y-%m-%d")
 
-            if time_since < 2400:
-                continue
+        with open("results.json", "r") as f:
 
-            r = requests.get(
-                f"{BASE_URL}/fixtures?id={match_id}",
-                headers=HEADERS
-            )
+            for line in f:
 
-            res = r.json().get("response", [])
+                try:
 
-            if not res:
-                continue
+                    r = json.loads(line)
 
-            fixture = res[0]["fixture"]
-            goals = res[0]["goals"]
+                    signal_date = str(
+                        r.get("signal_time", "")
+                    )[:10]
 
-            status = fixture["status"]["short"]
+                    if signal_date != today:
+                        continue
 
-            if status not in ["FT", "AET", "PEN"]:
-                continue
+                    total += 1
 
-            final_home = goals["home"] or 0
-            final_away = goals["away"] or 0
+                    if r["result"] == "✅ WIN":
+                        wins += 1
 
-            initial_total = sum(
-                map(int, data["initial_score"].split("-"))
-            )
+                    elif r["result"] == "🤝 PUSH":
+                        pushes += 1
 
-            final_total = final_home + final_away
+                    else:
+                        losses += 1
 
-            extra_goals = final_total - initial_total
+                except:
+                    continue
 
-            if extra_goals >= 2:
-            
-                result = "✅ WIN"
-            
-                profit_sim = round(
-                    data.get("book_odds", 0) - 1,
-                    2
-                )
-            
-            elif extra_goals == 1:
-            
-                result = "🤝 PUSH"
-            
-                profit_sim = 0
-            
-            else:
-            
-                result = "❌ LOSS"
-            
-                profit_sim = -1
-            
-            result_data["profit_sim"] = profit
+        if total == 0:
+            return
 
-            result_data["result"] = result
-            result_data["final_score"] = f"{final_home}-{final_away}"
-            result_data["profit_sim"] = profit_sim
-            
-            # =========================
-            # CLOSING ODDS
-            # =========================
-            closing_odds_data = get_odds(match_id)
-            
-            closing_odds = get_target_odds(
-                closing_odds_data,
-                initial_total
-            )
-            
-            result_data["closing_odds"] = closing_odds
+        winrate = round((wins / total) * 100, 2)
 
-            save_result_to_file(result_data)
-            save_result_to_csv(result_data)
+        report = f"""
+📅 DAILY SUMMARY
 
-            logging.info(
-                f"📊 RESULT → {data['teams']} | "
-                f"{result}"
-            )
+Date: {today}
 
-            del seen_matches[match_id]
+Signals: {total}
 
-            save_signals()
+✅ Wins: {wins}
+🤝 Pushes: {pushes}
+❌ Losses: {losses}
 
-        except Exception as e:
-            logging.error(f"Result error: {e}")
+🎯 Winrate: {winrate}%
+"""
+
+        logging.info(report)
+
+        send_telegram(report)
+
+    except Exception as e:
+
+        logging.error(f"Daily summary error: {e}")
 
 # =========================
 # MAIN LOOP
@@ -1251,18 +1228,19 @@ Score: {home_goals}-{away_goals}
                 except Exception as e:
                     logging.error(f"Match error: {e}")
 
-            current_day = datetime.now().strftime("%Y-%m-%d")
-            
-            global last_daily_report
-            
-            if last_daily_report != current_day:
+            current_time = time.time()
+            now_dt = datetime.now()
+
+            if (
+                now_dt.hour == 23
+                and now_dt.minute >= 55
+                and last_daily_report != now_dt.strftime("%Y-%m-%d")
+            ):
             
                 send_daily_summary()
             
-                last_daily_report = current_day
-
-            current_time = time.time()
-
+                last_daily_report = now_dt.strftime("%Y-%m-%d")
+    
             if current_time - last_result_check > 1800:
 
                 check_finished_matches()
