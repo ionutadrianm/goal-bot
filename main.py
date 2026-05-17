@@ -1000,7 +1000,7 @@ def check_finished_matches():
             send_telegram(f"""
 📊 RESULT
             
-            {data['teams']}
+{data['teams']}
             
             Signal Score:
             {data['signal_score']}
