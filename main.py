@@ -998,7 +998,7 @@ def check_finished_matches():
                 f"{result_data.get('book_odds')}"
             )
             send_telegram(f"""
-            📊 RESULT
+📊 RESULT
             
             {data['teams']}
             
