@@ -1002,17 +1002,17 @@ def check_finished_matches():
             
 {data['teams']}
             
-            Signal Score:
-            {data['signal_score']}
+Signal Score:
+{data['signal_score']}
             
-            Final Score:
-            {final_home}-{final_away}
+Final Score:
+{final_home}-{final_away}
             
-            {result}
+{result}
             
-            💰 Profit:
-            {profit_sim}u
-            """)
+💰 Profit:
+{profit_sim}u
+""")
             del seen_matches[match_id]
             
             save_signals()
