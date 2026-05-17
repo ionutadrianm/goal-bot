@@ -1167,7 +1167,7 @@ def run():
                     # =========================
                     # CONFIRM
                     # =========================
-                    if 50 <= minute <= 60:
+                    if 50 <= minute <= 55:
 
                         if match_id not in tracked_matches:
                             continue
@@ -1229,7 +1229,24 @@ def run():
                         
                             continue
         
-
+                        # =========================
+                        # LOW ACCURACY FILTER
+                        # =========================
+                        combined_accuracy = (
+                            stats["sot"] / stats["shots"]
+                            if stats["shots"] > 0 else 0
+                        )
+                        
+                        if combined_accuracy < 0.28:
+                        
+                            logging.info(
+                                f"SKIP LOW ACCURACY → "
+                                f"{home} vs {away} | "
+                                f"accuracy:{round(combined_accuracy,2)}"
+                            )
+                        
+                            continue
+    
                         # ORIGINAL SOT FILTER
                         if (
                             stats["sot"] < 3
@@ -1317,8 +1334,9 @@ def run():
                         # DOMINANT PRESSURE
                         # =========================
                         if (
-                            home_pressure_pct >= 70
-                            and stats["sot"] >= 5
+                            home_pressure_pct >= 72
+                            and stats["sot"] >= 6
+                            and stats["home_accuracy"] >= 0.35
                         ):
                             signal_tags.append("HOME_SIEGE")
                             signal_models.append("SIEGE")
