@@ -140,7 +140,8 @@ def get_stats(fixture_id):
             headers=HEADERS,
             timeout=15
         )
-
+        r.raise_for_status()
+        
         data = r.json().get("response", [])
 
         if len(data) < 2:
@@ -203,6 +204,7 @@ def get_stats(fixture_id):
 def get_odds(fixture_id):
     try:
         r = requests.get(f"{BASE_URL}/odds?fixture={fixture_id}", headers=HEADERS, timeout=15)
+        r.raise_for_status()
         data = r.json().get("response", [])
 
         if not data:
@@ -240,7 +242,7 @@ def get_prematch_odds(fixture_id):
             headers=HEADERS,
             timeout=15
         )
-
+        r.raise_for_status()
         data = r.json().get("response", [])
 
         if not data:
@@ -466,6 +468,7 @@ def save_result_to_csv(data):
                 "away_pressure_pct",
                 "minute_bucket",
                 "closing_odds",
+                "clv_diff",
             ])
 
             if not file_exists:
@@ -539,8 +542,16 @@ def save_result_to_csv(data):
                 "away_pressure_pct": data.get("away_pressure_pct"),
                 
                 "minute_bucket": data.get("minute_bucket"),
+
+                "closing_odds": data.get("closing_odds"),
                 
-                "closing_odds": data.get("closing_odds")
+                "clv_diff": round(
+                    (
+                        data.get("book_odds", 0)
+                        - data.get("closing_odds", 0)
+                    ),
+                    2
+                ) if data.get("closing_odds") and data.get("book_odds") else None
 
             })
 
@@ -866,6 +877,8 @@ def check_finished_matches():
     logging.info("📊 Checking results...")
 
     for match_id, data in list(seen_matches.items()):
+        if data.get("settled"):
+            continue
 
         try:
 
@@ -881,7 +894,7 @@ def check_finished_matches():
                 headers=HEADERS,
                 timeout=15
             )
-
+            r.raise_for_status()
             res = r.json().get("response", [])
 
             if not res:
@@ -948,13 +961,24 @@ def check_finished_matches():
             )
 
             result_data["closing_odds"] = closing_odds
-
+            result_data["settled"] = True
             save_result_to_file(result_data)
 
+            result_data["clv_diff"] = round(
+                (
+                    data.get("book_odds", 0)
+                    - closing_odds
+                ),
+                2
+            ) if closing_odds and data.get("book_odds") else None
+                        
             save_result_to_csv(result_data)
 
             logging.info(
-                f"📊 RESULT → {data['teams']} | {result}"
+                f"📊 RESULT → {data['teams']} | "
+                f"{result} | "
+                f"CLV:{result_data.get('closing_odds')} vs "
+                f"{result_data.get('book_odds')}"
             )
             send_telegram(f"""
             📊 RESULT
@@ -973,7 +997,7 @@ def check_finished_matches():
             {profit_sim}u
             """)
             del seen_matches[match_id]
-
+            
             save_signals()
 
         except Exception as e:
@@ -1030,7 +1054,7 @@ def run():
 
                     total = home_goals + away_goals
 
-                    if total >= 3:
+                    if total >= 4:
                         continue
                     
                     goal_diff = abs(home_goals - away_goals)
@@ -1130,13 +1154,6 @@ def run():
 
                         if match_id in seen_matches:
                             continue
-
-                        if match_id in tracked_matches:
-
-                            existing = tracked_matches[match_id]
-                        
-                            if existing.get("signal_sent"):
-                                continue
                             
                         first = tracked_matches[match_id]
 
@@ -1368,7 +1385,8 @@ def run():
 
                         if shots_per_min < 0.35:
                             continue
-
+                        if sot_per_min < 0.08:
+                            continue
                         if (
                             delta["shots"] < 2
                             and delta["sot"] < 1
@@ -1397,7 +1415,13 @@ def run():
                         ):
                             continue
                             
-                        if value is None or value < 5:
+                        if book_odds is None:
+                            continue
+                        
+                        if value is None:
+                            continue
+                        
+                        if value < 5:
 
                             logging.info(
                                 f"⛔ SKIPPED → {home} vs {away}\n"
@@ -1446,7 +1470,6 @@ Score: {home_goals}-{away_goals}
                         # =========================
                         # SAVE SIGNAL
                         # =========================
-                        tracked_matches[match_id]["signal_sent"] = True
                         seen_matches[match_id] = {
 
                             "time": datetime.now(),
@@ -1552,7 +1575,7 @@ Score: {home_goals}-{away_goals}
             save_tracked()
             save_signals()
 
-            time.sleep(300)
+            time.sleep(120)
 
         except Exception as e:
 
