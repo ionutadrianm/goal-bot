@@ -101,7 +101,14 @@ def load_tracked():
 def send_telegram(msg):
     try:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
+        requests.post(
+            url,
+            data={
+                "chat_id": CHAT_ID,
+                "text": msg
+            },
+            timeout=15
+        ).raise_for_status()
     except Exception as e:
         logging.error(f"Telegram error: {e}")
 
@@ -110,7 +117,13 @@ def send_telegram(msg):
 # =========================
 def get_live_matches():
     try:
-        r = requests.get(f"{BASE_URL}/fixtures?live=all", headers=HEADERS)
+        r = requests.get(
+            f"{BASE_URL}/fixtures?live=all",
+            headers=HEADERS,
+            timeout=15
+        )
+        
+        r.raise_for_status()
         data = r.json()
         return data.get("response", [])
     except Exception as e:
@@ -124,7 +137,8 @@ def get_stats(fixture_id):
     try:
         r = requests.get(
             f"{BASE_URL}/fixtures/statistics?fixture={fixture_id}",
-            headers=HEADERS
+            headers=HEADERS,
+            timeout=15
         )
 
         data = r.json().get("response", [])
@@ -188,7 +202,7 @@ def get_stats(fixture_id):
 # =========================
 def get_odds(fixture_id):
     try:
-        r = requests.get(f"{BASE_URL}/odds?fixture={fixture_id}", headers=HEADERS)
+        r = requests.get(f"{BASE_URL}/odds?fixture={fixture_id}", headers=HEADERS, timeout=15)
         data = r.json().get("response", [])
 
         if not data:
@@ -223,7 +237,8 @@ def get_prematch_odds(fixture_id):
     try:
         r = requests.get(
             f"{BASE_URL}/odds?fixture={fixture_id}",
-            headers=HEADERS
+            headers=HEADERS,
+            timeout=15
         )
 
         data = r.json().get("response", [])
@@ -288,23 +303,50 @@ def classify(score):
     else:
         return "⚡ MEDIUM"
 
-def estimate_probability(stats, delta, minute):
+def estimate_probability(stats, delta, minute, total_goals):
 
     prob = 0.45
 
+    # SHOTS
     if stats["shots"] >= 10:
-        prob += 0.10
+        prob += 0.08
 
+    if stats["shots"] >= 14:
+        prob += 0.05
+        
+    # SOT
     if stats["sot"] >= 4:
-        prob += 0.15
+        prob += 0.12
 
+    if stats["sot"] >= 6:
+        prob += 0.08
+
+    # MOMENTUM
     if delta["shots"] >= 3:
-        prob += 0.10
+        prob += 0.06
 
+    if delta["shots"] >= 6:
+        prob += 0.05
+
+    # TIME
     if minute >= 60:
         prob += 0.05
 
-    return min(prob, 0.85)
+    # END TO END
+    if (
+        stats["home_sot"] >= 2 and
+        stats["away_sot"] >= 2
+    ):
+        prob += 0.08
+
+    # SCORE STATE PENALTIES
+    if total_goals >= 2:
+        prob -= 0.15
+
+    if total_goals >= 3:
+        prob -= 0.25
+
+    return max(min(prob, 0.85), 0.05)
 
 def prob_to_odds(prob):
 
@@ -368,6 +410,7 @@ def save_result_to_csv(data):
 
                 "signal_tier",
                 "signal_type",
+                "signal_model",
                 "signal_tags",
 
                 "model_score",
@@ -437,6 +480,7 @@ def save_result_to_csv(data):
 
                 "signal_tier": data.get("signal_tier"),
                 "signal_type": data.get("signal_type"),
+                "signal_model": data.get("signal_model"),
                 "signal_tags": ",".join(data.get("signal_tags", [])),
 
                 "model_score": data.get("model_score"),
@@ -531,6 +575,8 @@ def generate_performance_report():
 
         minute_stats = {}
 
+        model_stats = {}
+
         with open("results.json", "r") as f:
 
             for line in f:
@@ -594,6 +640,24 @@ def generate_performance_report():
                         if result == "✅ WIN":
                             tag_stats[tag]["wins"] += 1
 
+                    # =====================
+                    # MODELS
+                    # =====================
+                    
+                    model = r.get("signal_model", "UNKNOWN")
+                    
+                    if model not in model_stats:
+                    
+                        model_stats[model] = {
+                            "total": 0,
+                            "wins": 0
+                        }
+                    
+                    model_stats[model]["total"] += 1
+                    
+                    if result == "✅ WIN":
+                        model_stats[model]["wins"] += 1
+                        
                     # =====================
                     # MINUTE BUCKETS
                     # =====================
@@ -661,7 +725,19 @@ def generate_performance_report():
         # =====================
         # MINUTES
         # =====================
+        model_lines = []
 
+        for model, vals in model_stats.items():
+        
+            wr = round(
+                (vals["wins"] / vals["total"]) * 100,
+                1
+            )
+        
+            model_lines.append(
+                f"{model}: {wr}% ({vals['total']})"
+            )
+            
         minute_lines = []
 
         for bucket, vals in minute_stats.items():
@@ -691,6 +767,9 @@ Signals: {total}
 
 🔥 ELITE WR: {elite_wr}%
 ⚡ STRONG WR: {strong_wr}%
+
+🧠 MODEL STATS:
+{chr(10).join(model_lines)}
 
 🏷 TAG STATS:
 {chr(10).join(tag_lines[:5])}
@@ -799,7 +878,8 @@ def check_finished_matches():
 
             r = requests.get(
                 f"{BASE_URL}/fixtures?id={match_id}",
-                headers=HEADERS
+                headers=HEADERS,
+                timeout=15
             )
 
             res = r.json().get("response", [])
@@ -952,6 +1032,16 @@ def run():
 
                     if total >= 3:
                         continue
+                    
+                    goal_diff = abs(home_goals - away_goals)
+                    
+                    if (
+                        total >= 2
+                        and goal_diff >= 2
+                    ):
+                        continue
+                    if total >= 2 and minute < 55:
+                        continue
 
                     stats = get_stats(match_id)
 
@@ -972,7 +1062,10 @@ def run():
                                 f"corners:{stats['corners']}"
                             )
 
-                            if stats["shots"] >= 5:
+                            if (
+                                stats["shots"] >= 6
+                                and stats["sot"] >= 1
+                            ):
 
                                 prematch = get_prematch_odds(match_id)
 
@@ -1038,6 +1131,13 @@ def run():
                         if match_id in seen_matches:
                             continue
 
+                        if match_id in tracked_matches:
+
+                            existing = tracked_matches[match_id]
+                        
+                            if existing.get("signal_sent"):
+                                continue
+                            
                         first = tracked_matches[match_id]
 
                         logging.info(
@@ -1067,7 +1167,10 @@ def run():
                             if stats["shots"] > 0 else 0
                         )
 
-                        if stats["shots"] >= 12 and accuracy < 0.20:
+                        if (
+                            stats["shots"] >= 14
+                            and stats["sot"] <= 3
+                        ):
 
                             logging.info(
                                 f"SKIP FAKE PRESSURE → "
@@ -1077,8 +1180,31 @@ def run():
 
                             continue
 
+                        if (
+                            stats["corners"] >= 9
+                            and stats["sot"] <= 3
+                        ):
+                        
+                            logging.info(
+                                f"SKIP CORNER FARM → "
+                                f"{home} vs {away}"
+                            )
+                        
+                            continue
+        
+
                         # ORIGINAL SOT FILTER
-                        if stats["sot"] < 2:
+                        if (
+                            stats["sot"] < 3
+                            and stats["shots"] < 12
+                        ):
+                            continue
+
+                        # DEAD ATTACK FILTER
+                        if (
+                            stats["shots"] >= 16
+                            and stats["sot"] <= 3
+                        ):
                             continue
 
                         # =========================
@@ -1112,21 +1238,19 @@ def run():
                         if stats["shots"] >= 12 and stats["sot"] <= 2:
                             score -= 15
 
-                        tier = classify(score)
-
                         # =========================
                         # PRESSURE SPLIT
                         # =========================
                         home_pressure = (
-                            stats["home_shots"] +
-                            (stats["home_sot"] * 2) +
-                            stats["home_corners"]
+                            (stats["home_shots"] * 1)
+                            + (stats["home_sot"] * 3)
+                            + (stats["home_corners"] * 0.3)
                         )
                         
                         away_pressure = (
-                            stats["away_shots"] +
-                            (stats["away_sot"] * 2) +
-                            stats["away_corners"]
+                            (stats["away_shots"] * 1)
+                            + (stats["away_sot"] * 3)
+                            + (stats["away_corners"] * 0.3)
                         )
                         
                         total_pressure = home_pressure + away_pressure
@@ -1141,6 +1265,7 @@ def run():
                         )
                         
                         signal_tags = []
+                        signal_model = "DEFAULT"
 
                         # =========================
                         # WOUNDED FAVORITE
@@ -1154,11 +1279,19 @@ def run():
                         # =========================
                         # DOMINANT PRESSURE
                         # =========================
-                        if home_pressure_pct >= 70:
+                        if (
+                            home_pressure_pct >= 70
+                            and stats["sot"] >= 5
+                        ):
                             signal_tags.append("HOME_SIEGE")
+                            signal_model = "SIEGE"
                         
-                        if away_pressure_pct >= 70:
+                        if (
+                            away_pressure_pct >= 70
+                            and stats["sot"] >= 5
+                        ):
                             signal_tags.append("AWAY_SIEGE")
+                            signal_model = "SIEGE"
                         
                         # =========================
                         # END TO END
@@ -1168,13 +1301,31 @@ def run():
                             stats["away_sot"] >= 2
                         ):
                             signal_tags.append("END_TO_END")
-                        
+                            score += 15
+                            signal_model = "END_TO_END"
+                        if (
+                            total >= 2
+                            and stats["shots"] >= 14
+                            and stats["sot"] >= 6
+                            and signal_model == "DEFAULT"
+                        ):
+                            signal_model = "CHAOS"
+                            score += 10
+                            
                         # =========================
                         # CORNER PRESSURE
                         # =========================
-                        if stats["corners"] >= 10:
+                        if (
+                            stats["corners"] >= 10
+                            and stats["sot"] >= 5
+                        ):
                             signal_tags.append("HIGH_CORNERS")
+                        tier = classify(score)
 
+                        # REMOVE WEAK DEFAULT SIGNALS
+                        if signal_model == "DEFAULT":
+                            continue
+                        
                         logging.info(
                             f"SIGNAL TAGS → "
                             f"{', '.join(signal_tags) if signal_tags else 'NONE'}"
@@ -1190,16 +1341,45 @@ def run():
                             total
                         )
 
+                        if (
+                            book_odds is not None
+                            and book_odds < 1.45
+                        ):
+                            continue
+                            
                         delta = {
                             "shots": stats["shots"] - first["track_stats"]["shots"],
                             "sot": stats["sot"] - first["track_stats"]["sot"],
                             "corners": stats["corners"] - first["track_stats"]["corners"]
                         }
+                        minutes_passed = minute - first["track_minute"]
+                        
+                        shots_per_min = round(
+                            delta["shots"] / max(minutes_passed, 1),
+                            2
+                        )
+                        
+                        sot_per_min = round(
+                            delta["sot"] / max(minutes_passed, 1),
+                            2
+                        )
+                        if delta["sot"] <= 0:
+                            continue
 
+                        if shots_per_min < 0.35:
+                            continue
+
+                        if (
+                            delta["shots"] < 2
+                            and delta["sot"] < 1
+                        ):
+                            continue
+    
                         prob = estimate_probability(
                             stats,
                             delta,
-                            minute
+                            minute,
+                            total
                         )
 
                         fair_odds = prob_to_odds(prob)
@@ -1208,8 +1388,16 @@ def run():
                             book_odds,
                             fair_odds
                         ) if book_odds else None
-
-                        if value is None or value < 2:
+                        
+                        # FILTER MEDIUM VALUE TRAPS
+                        if (
+                            tier == "⚡ MEDIUM"
+                            and value is not None
+                            and value < 10
+                        ):
+                            continue
+                            
+                        if value is None or value < 5:
 
                             logging.info(
                                 f"⛔ SKIPPED → {home} vs {away}\n"
@@ -1227,6 +1415,7 @@ def run():
 {tier} VALUE SIGNAL
 
 {home} vs {away}
+League: {m["league"]["name"]}
 
 Min: {minute}'
 Score: {home_goals}-{away_goals}
@@ -1238,6 +1427,8 @@ Score: {home_goals}-{away_goals}
 
 📊 Model Prob: {round(prob*100)}%
 🔥 Value: {value}%
+
+🧠 Model: {signal_model}
 
 ⚽ Shots:
 {stats['home_shots']} - {stats['away_shots']}
@@ -1255,10 +1446,12 @@ Score: {home_goals}-{away_goals}
                         # =========================
                         # SAVE SIGNAL
                         # =========================
+                        tracked_matches[match_id]["signal_sent"] = True
                         seen_matches[match_id] = {
 
                             "time": datetime.now(),
-
+                            "signal_model": signal_model,
+                            
                             "teams": f"{home} vs {away}",
 
                             "track_score": first["score"],
