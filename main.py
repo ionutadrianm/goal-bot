@@ -701,7 +701,7 @@ Signals: {total}
 
         logging.info(report)
 
-        send_telegram(report)
+        # send_telegram(report)
 
     except Exception as e:
         logging.error(f"Report error: {e}")
@@ -876,7 +876,22 @@ def check_finished_matches():
             logging.info(
                 f"📊 RESULT → {data['teams']} | {result}"
             )
-
+            send_telegram(f"""
+            📊 RESULT
+            
+            {data['teams']}
+            
+            Signal Score:
+            {data['signal_score']}
+            
+            Final Score:
+            {final_home}-{final_away}
+            
+            {result}
+            
+            💰 Profit:
+            {profit_sim}u
+            """)
             del seen_matches[match_id]
 
             save_signals()
@@ -1288,7 +1303,9 @@ Score: {home_goals}-{away_goals}
                             "prematch_over_2_5": first.get("prematch_over_2_5"),
                             "prematch_over_3_5": first.get("prematch_over_3_5"),
                             
-                            "goals_at_signal": total
+                            "goals_at_signal": total,
+                            "profit_sim": 0,
+                            "closing_odds": None,
                         }
 
                         del tracked_matches[match_id]
