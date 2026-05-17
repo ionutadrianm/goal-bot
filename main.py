@@ -655,19 +655,27 @@ def generate_performance_report():
                     # MODELS
                     # =====================
                     
-                    model = r.get("signal_model", "UNKNOWN")
+                    models_raw = r.get("signal_model", "")
+
+                    models = [
+                        m.strip()
+                        for m in models_raw.split(",")
+                        if m.strip()
+                    ]
                     
-                    if model not in model_stats:
+                    for model in models:
                     
-                        model_stats[model] = {
-                            "total": 0,
-                            "wins": 0
-                        }
+                        if model not in model_stats:
                     
-                    model_stats[model]["total"] += 1
+                            model_stats[model] = {
+                                "total": 0,
+                                "wins": 0
+                            }
                     
-                    if result == "✅ WIN":
-                        model_stats[model]["wins"] += 1
+                        model_stats[model]["total"] += 1
+                    
+                        if result == "✅ WIN":
+                            model_stats[model]["wins"] += 1
                         
                     # =====================
                     # MINUTE BUCKETS
@@ -727,7 +735,7 @@ def generate_performance_report():
             wr = round(
                 (vals["wins"] / vals["total"]) * 100,
                 1
-            )
+            ) if vals["total"] > 0 else 0
 
             tag_lines.append(
                 f"{tag}: {wr}% ({vals['total']})"
@@ -738,12 +746,16 @@ def generate_performance_report():
         # =====================
         model_lines = []
 
-        for model, vals in model_stats.items():
+        for model, vals in sorted(
+            model_stats.items(),
+            key=lambda x: x[1]["wins"],
+            reverse=True
+        ):
         
             wr = round(
                 (vals["wins"] / vals["total"]) * 100,
                 1
-            )
+            ) if vals["total"] > 0 else 0
         
             model_lines.append(
                 f"{model}: {wr}% ({vals['total']})"
@@ -756,7 +768,7 @@ def generate_performance_report():
             wr = round(
                 (vals["wins"] / vals["total"]) * 100,
                 1
-            )
+            ) if vals["total"] > 0 else 0
 
             minute_lines.append(
                 f"{bucket}: {wr}%"
@@ -886,6 +898,10 @@ def check_finished_matches():
                 datetime.now() - data["time"]
             ).total_seconds()
 
+            if time_since > 43200:
+                del seen_matches[match_id]
+                continue
+                
             if time_since < 2400:
                 continue
 
@@ -962,8 +978,7 @@ def check_finished_matches():
 
             result_data["closing_odds"] = closing_odds
             result_data["settled"] = True
-            save_result_to_file(result_data)
-
+            
             result_data["clv_diff"] = round(
                 (
                     data.get("book_odds", 0)
@@ -971,7 +986,9 @@ def check_finished_matches():
                 ),
                 2
             ) if closing_odds and data.get("book_odds") else None
-                        
+            
+            save_result_to_file(result_data)
+            
             save_result_to_csv(result_data)
 
             logging.info(
@@ -1064,9 +1081,12 @@ def run():
                         and goal_diff >= 2
                     ):
                         continue
-                    if total >= 2 and minute < 55:
+                    if (
+                        total >= 2
+                        and minute < 58
+                        and stats["sot"] < 6
+                    ):
                         continue
-
                     stats = get_stats(match_id)
 
                     if stats is None:
@@ -1282,7 +1302,7 @@ def run():
                         )
                         
                         signal_tags = []
-                        signal_model = "DEFAULT"
+                        signal_models = []
 
                         # =========================
                         # WOUNDED FAVORITE
@@ -1301,14 +1321,14 @@ def run():
                             and stats["sot"] >= 5
                         ):
                             signal_tags.append("HOME_SIEGE")
-                            signal_model = "SIEGE"
+                            signal_models.append("SIEGE")
                         
                         if (
                             away_pressure_pct >= 70
                             and stats["sot"] >= 5
                         ):
                             signal_tags.append("AWAY_SIEGE")
-                            signal_model = "SIEGE"
+                            signal_models.append("SIEGE")
                         
                         # =========================
                         # END TO END
@@ -1319,14 +1339,13 @@ def run():
                         ):
                             signal_tags.append("END_TO_END")
                             score += 15
-                            signal_model = "END_TO_END"
+                            signal_models.append("END_TO_END")
                         if (
                             total >= 2
                             and stats["shots"] >= 14
                             and stats["sot"] >= 6
-                            and signal_model == "DEFAULT"
                         ):
-                            signal_model = "CHAOS"
+                            signal_models.append("CHAOS")
                             score += 10
                             
                         # =========================
@@ -1340,9 +1359,12 @@ def run():
                         tier = classify(score)
 
                         # REMOVE WEAK DEFAULT SIGNALS
-                        if signal_model == "DEFAULT":
+                        if not signal_models:
                             continue
-                        
+                            
+                        signal_models = list(set(signal_models))
+                        signal_tags = list(set(signal_tags))
+
                         logging.info(
                             f"SIGNAL TAGS → "
                             f"{', '.join(signal_tags) if signal_tags else 'NONE'}"
@@ -1452,7 +1474,8 @@ Score: {home_goals}-{away_goals}
 📊 Model Prob: {round(prob*100)}%
 🔥 Value: {value}%
 
-🧠 Model: {signal_model}
+🧠 Models:
+{', '.join(signal_models)}
 
 ⚽ Shots:
 {stats['home_shots']} - {stats['away_shots']}
@@ -1473,7 +1496,7 @@ Score: {home_goals}-{away_goals}
                         seen_matches[match_id] = {
 
                             "time": datetime.now(),
-                            "signal_model": signal_model,
+                            "signal_model": ",".join(signal_models),
                             
                             "teams": f"{home} vs {away}",
 
